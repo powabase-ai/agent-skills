@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/powabase-ai/agent-skills/compare/v1.0.0...v1.1.0) (2026-06-05)
+
+
+### Features
+
+* distribute across OpenAI, Google, and other agent ecosystems ([fa201f6](https://github.com/powabase-ai/agent-skills/commit/fa201f60bba3f430f13cae26549c05bebeedc92a))
+
 ## 1.0.0 (2026-06-05)
 
 
