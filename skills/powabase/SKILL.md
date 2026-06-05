@@ -1,6 +1,6 @@
 ---
 name: powabase
-description: "Use for ANY task building on Powabase, the multi-tenant AI Backend-as-a-Service (projects on *.p.powabase.ai, the /api/* surface). Triggers: RAG & knowledge bases (Sources, document upload/extraction, indexing strategies chunk_embed/full_document/page_index/graph_index/doc2json, retrieval vector/full-text/hybrid/tree search, reranking, embeddings, pgvector); agents (ReAct loops, builtin/custom/MCP tools, sessions, streaming, approval/human-in-the-loop); multi-agent orchestrations (supervisor/sequential/parallel); workflows (block graphs, webhooks, scheduled/cron triggers, Copilot); SSE streaming of agent/orchestration/workflow runs; and the Powabase BaaS layer — PostgREST, Row Level Security, the ai.* schema, GoTrue auth, Storage, Realtime, direct Postgres. Also connecting/authenticating, choosing the right API key, and handling billing/rate-limit/error responses."
+description: "Use for ANY task building on Powabase, the multi-tenant AI Backend-as-a-Service (projects on *.p.powabase.ai, the /api/* surface). Triggers: RAG & knowledge bases (Sources, document upload/extraction, indexing strategies chunk_embed/full_document/page_index/graph_index/doc2json, retrieval vector/full-text/hybrid/tree search, reranking, query enrichment, multimodal/image retrieval, embeddings, pgvector); agents (ReAct loops, builtin/custom/MCP tools, sessions, streaming, approval/human-in-the-loop); multi-agent orchestrations (supervisor/sequential/parallel); workflows (block graphs, webhooks, scheduled/cron triggers, Copilot); SSE streaming of agent/orchestration/workflow runs; and the Powabase BaaS layer — PostgREST, Row Level Security, the ai.* schema, GoTrue auth, Storage, Realtime, direct Postgres. Also connecting/authenticating, choosing the right API key, and handling billing/rate-limit/error responses."
 license: MIT
 metadata:
   author: powabase
@@ -126,6 +126,12 @@ Details: [rag-context-engineering.md](references/rag-context-engineering.md),
 
 > `tree_search` works **only** with `page_index` KBs. `build-bm25` and `full_text`/`hybrid` need a KB whose retrieval method includes BM25.
 
+> **Tune retrieval quality with three `retrieval_config` knobs** (stored on the KB,
+> query-time, no reindex; settable at create or via `PATCH`): `reranker`
+> (precision), `query_enrichment` (LLM query rewrite for conversational/multi-turn),
+> `context_mode: "image"` (multimodal retrieval — all strategies except `doc2json`).
+> See [rag-context-engineering.md](references/rag-context-engineering.md) §6.
+
 **Agent vs Orchestration vs Workflow?**
 
 - **Agent** — one LLM decides what to do, calls tools in a ReAct loop. Open-ended
@@ -197,7 +203,7 @@ docs. Don't assume tools named `powabase_*` exist.
 
 - [connection-and-auth.md](references/connection-and-auth.md) — Connect modal, key types, the two-header pattern, base URL, token refresh.
 - [api-conventions.md](references/api-conventions.md) — error envelopes per service, pagination, PUT vs PATCH, naming traps, retry logic.
-- [rag-context-engineering.md](references/rag-context-engineering.md) — Sources, Knowledge Bases, indexing strategies, retrieval methods, reranking, enrichment.
+- [rag-context-engineering.md](references/rag-context-engineering.md) — Sources, Knowledge Bases, indexing strategies, retrieval methods, reranking, query enrichment, multimodal retrieval, enrichment.
 - [agents-and-tools.md](references/agents-and-tools.md) — agent config, ReAct limits, builtin/custom/MCP tools, sessions, approval, hooks, run records.
 - [orchestrations.md](references/orchestrations.md) — supervisor/sequential/parallel coordinators, entities, delegation, streaming.
 - [workflows-and-copilot.md](references/workflows-and-copilot.md) — 10 block types, graph & reference syntax, triggers, webhooks, Copilot.

@@ -81,6 +81,22 @@ verify if it matters.)
 Any `indexing_config`/`retrieval_config` you pass is **merged over** the strategy
 defaults (not a full replace). Default strategy is `chunk_embed`.
 
+> **Reranking, query enrichment, and multimodal retrieval all live in
+> `retrieval_config` and are stored on the KB** — set them at create OR change them
+> later with `PATCH /api/knowledge-bases/{id}` (same fields as create). Because
+> they're query-time, edits take effect on the next search with **no reindex**.
+> The Studio "Create KB" modal exposes all three; over the API you set them
+> directly. Shape:
+> ```json
+> "retrieval_config": {
+>   "method": "hybrid", "top_k": 5, "vector_weight": 0.5,
+>   "context_mode": "image",                                    // §6.3 multimodal retrieval
+>   "reranker": { "model": "cohere/rerank-english-v3.0", "candidate_count": 20 },  // §6.1
+>   "query_enrichment": { "enabled": true, "model": "gpt-5-mini" }                 // §6.2
+> }
+> ```
+> Only `indexing_config` changes (chunking/embedding model/strategy) require a reindex.
+
 > **The two-IDs trap.** Adding a source uses `source_id` (the `ai.sources` UUID).
 > But cancel / reindex / DELETE-link use `indexed_source_id` — the
 > `indexed_sources.id` returned as `id` in the `/sources` list. They are different
@@ -163,18 +179,82 @@ GraphIndex also supports tree_search; the strategy/Info-box guidance says no —
 live if you need it.) `full_text`/`hybrid` require a BM25 index; rebuild it with
 `POST .../build-bm25` (vector-only KBs → 400).
 
-## 6. Embeddings & reranking
+## 6. Embeddings, reranking, query enrichment & multimodal retrieval
 
 - **Embedding model** default `text-embedding-3-small` (OpenAI, 1536 dims). All
   chunks in a KB must share one model — changing it requires a reindex. pgvector
   **HNSW caps at 2000 dims**: `text-embedding-3-large` (3072) falls back to a slow
   sequential scan. Cohere/Voyage/Google/Mistral models are supported via LiteLLM
   but need their platform-level API keys configured by an admin.
-- **Reranking** (optional, precision boost): a cross-encoder re-scores a candidate
-  pool (default `candidate_count=20`) then returns `top_k`. Providers: Cohere
-  (default), Jina, Voyage, ZeroEntropy. Reranker API keys are **platform-managed**.
-  Enable per strategy / per search request. `GET /api/config/kb-defaults` lists the
-  selectable rerankers authoritatively.
+
+### 6.1 Reranking — `retrieval_config.reranker`
+
+Optional precision boost: a two-stage pipeline fetches `candidate_count` items with
+the configured `method`, then a cross-encoder re-scores them and truncates to
+`top_k`. **Enabled iff `reranker.model` is set** (omit the object → off). Stored on
+the KB; query-time, so no reindex.
+
+```json
+"reranker": { "model": "cohere/rerank-english-v3.0", "candidate_count": 20 }
+```
+
+- `candidate_count` default **20** (Stage-1 pool); final count is `retrieval_config.top_k` (default 5).
+- **Models** (provider-namespaced strings): `cohere/rerank-english-v3.0` (default),
+  `cohere/rerank-multilingual-v3.0`, `jina_ai/jina-reranker-v2-base-multilingual`,
+  `voyage/rerank-2.5`, `voyage/rerank-2.5-lite`, `zerank-1`/`zerank-2` (ZeroEntropy —
+  a `zerank`-prefixed string routes to the ZeroEntropy client; everything else goes
+  through LiteLLM, so Together/Azure/self-hosted `hosted_vllm/*` also work).
+- Keys are **platform-managed** (admin). Billed as `reranker_call`. **Fails open** —
+  a reranker error returns Stage-1 results truncated to `top_k`.
+- `GET /api/config/kb-defaults` lists selectable rerankers authoritatively — don't hardcode.
+
+### 6.2 Query enrichment — `retrieval_config.query_enrichment`
+
+Optional LLM step that rewrites the query before retrieval. **Off by default**;
+opt in per KB. Stored on the KB (query-time, no reindex).
+
+```json
+"query_enrichment": { "enabled": true, "model": "gpt-5-mini" }
+```
+
+- When on, the LLM (default `gpt-5-mini`, temperature 0) produces two variants:
+  **`enriched_query`** (semantic restatement → used for the vector embedding) and
+  **`keyword_query`** (OR-joined synonyms → used for BM25). Session history (recent
+  turns) is fed in to resolve pronouns/ellipsis: *"what about pricing?"* →
+  *"What are the AWS cloud pricing options?"*.
+- The result is echoed in the response as `query_enrichment`
+  (`original_query`/`enriched_query`/`keyword_query`/`model`/`method:"llm_enrichment"`).
+  Billed as `query_enrichment`.
+- **When to use:** conversational / multi-turn retrieval where follow-ups depend on
+  prior context, or terse keyword queries that benefit from synonym expansion on
+  hybrid/full_text. **Skip it** for simple single-shot lookups — it adds an LLM call
+  (latency + cost) per search. **Auto-skipped for `tree_search`** (which does its own
+  LLM doc/section selection). Note: for `full_text`/`hybrid`, even with enrichment
+  **off**, a fast *tokenization* context-builder still folds history into the keyword
+  query — that's not LLM enrichment and isn't billed as such.
+
+### 6.3 Multimodal retrieval — `retrieval_config.context_mode`
+
+`"text"` (default) returns chunk text; **`"image"`** returns the **original page
+images** of the matched content as multimodal content blocks for the LLM —
+preserving layout, tables, charts, stamps, handwriting that text extraction loses.
+
+```json
+"context_mode": "image"   // optional: "image_delivery": "base64" | signed-url
+```
+
+- **Available for all strategies EXCEPT `doc2json`** — `chunk_embed`,
+  `full_document`, `page_index`, `graph_index` all support it. (Doc2JSON instead has
+  an *indexing-time* `use_images` flag, §4.) This is the cross-cutting "multimodal
+  retrieval" toggle, and it's a **retrieval-time** concern — stored on the KB,
+  settable at create or via `PATCH`, no reindex.
+- Resolves the **page-image derivatives** rendered at source extraction; items
+  without an available page image **fall back to text** gracefully.
+- **The consuming agent model must be vision-capable** (GPT-4o/GPT-5 class). A
+  text-only model silently drops the image blocks — the classic "agent has the doc
+  but answers as if it didn't" bug.
+- Don't confuse with **metadata enrichment**'s `use_multimodal` (a separate
+  `PUT /enrichment` flag that lets the *enricher* see page images; orthogonal, all strategies).
 
 ## 7. Decision guide
 
@@ -195,4 +275,9 @@ live if you need it.) `full_text`/`hybrid` require a BM25 index; rebuild it with
 - **`text-embedding-3-large` (3072) > HNSW's 2000-dim limit** → slow sequential scan.
 - **`full_document` summary truncates at ~32K tokens**; reindex destroys + recreates all artifacts.
 - **Non-OpenAI embedding/reranker providers need platform keys** (admin).
+- **Reranker/query-enrichment/multimodal all nest in `retrieval_config`** (§6.1–6.3),
+  are query-time, and need **no reindex** — editable via `PATCH`. Reranking is on iff
+  `reranker.model` is present; `query_enrichment.enabled` is **off** by default.
+- **`context_mode: "image"` needs a vision-capable agent model** and page-image
+  derivatives; it's available for every strategy **except `doc2json`**.
 - **`GET /api/config/kb-defaults`** is authoritative for selectable options — don't hardcode.
