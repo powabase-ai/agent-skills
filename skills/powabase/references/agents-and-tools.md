@@ -1,0 +1,222 @@
+# Agents, tools & sessions
+
+An **agent** = an LLM + system prompt + settings + tools + optional knowledge
+bases + session memory, run in a **ReAct** (reason → act → observe) loop. Streamed
+over SSE. All paths under `{BASE_URL}` with two-header auth.
+
+## 1. Endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET / POST | `/api/agents` | List / create |
+| GET / **PATCH** / DELETE | `/api/agents/{id}` | Get / update / delete |
+| POST / GET | `/api/agents/{id}/tools` | Assign / list tool assignments |
+| **PATCH** / DELETE | `/api/agents/{id}/tools/{assignment_id}` | Update `config_override` / remove |
+| POST / GET | `/api/agents/{id}/knowledge-bases` | Link / list KBs (link auto-adds a `knowledge_search` tool) |
+| DELETE | `/api/agents/{id}/knowledge-bases/{assignment_id}` | Unlink a KB |
+| POST / GET | `/api/agents/{id}/mcp-servers` | Add / list MCP servers |
+| **PUT** / DELETE | `/api/agents/{id}/mcp-servers/{server_id}` | Update / remove an MCP server |
+| POST / GET | `/api/agents/{id}/hooks` | Add / list lifecycle hooks |
+| DELETE | `/api/agents/{id}/hooks/{hook_id}` | Remove a hook |
+| GET | `/api/agents/{id}/sessions` | List the agent's chat sessions |
+| POST | `/api/agents/{id}/run` | **Sync run — no tools, no ReAct loop** (single LLM call) |
+| POST | `/api/agents/{id}/run/stream` | **Streaming run — tools + ReAct + multi-turn** |
+| GET | `/api/agents/runs/{run_id}` | Fetch a run (status, error, events, tool_calls, ...) |
+| POST | `/api/agents/runs/{run_id}/approve` | Approve/deny a paused tool call |
+
+Tool **definitions** live on a separate resource: GET/POST `/api/tools`,
+GET/**PUT**/DELETE `/api/tools/{id}`.
+
+## 2. Agent config
+
+Create/update body honors **only** `name` (required on create), `model`,
+`system_prompt`, `settings`.
+
+```json
+{ "name": "Docs Assistant", "model": "gpt-4o",
+  "system_prompt": "Use the knowledge base to answer.",
+  "settings": { "temperature": 0.7 } }
+```
+
+> **Top-level `temperature` (and other tuning fields) are silently dropped.** Nest
+> all model tuning inside `settings`. No error is returned — you just get defaults.
+
+No model allow-list is documented (examples use `gpt-4o`); check
+`AGENT_DEFAULT_MODEL` / live docs.
+
+**Per-run body** (`/run` and `/run/stream`): `message` (required); `session_id`
+(omit to start fresh); `temperature` (per-run override); `response_format`
+(JSON-schema for structured output); `reasoning_requested` (bool); `max_context_tokens`;
+`citations_enabled`. **Context sources are mutually exclusive** — provide at most
+**one** of `knowledge_bases` / `context_handler_id` / `context_override` /
+`context_items`, or you get 400.
+
+## 3. The ReAct loop & limits
+
+`/run/stream` runs the loop: the LLM reasons, optionally calls tools (concurrency-
+safe tools like KB search run in parallel; others sequentially), observes results,
+and iterates until it produces text. The model also auto-compacts context as it
+approaches the limit.
+
+| Constraint | Default |
+| --- | --- |
+| Max ReAct steps | **25** (final step withholds tools to force a response) |
+| Doom-loop detection | same tool + same args **3×** in a row → run fails |
+| Output-truncation recovery | 3 continuation retries |
+| Custom/MCP tool timeout | 30 s |
+| Tool-result truncation | 50,000 chars (KB search & delegation exempt) |
+| Approval timeout | 300 s |
+| Max orchestration depth | 3 |
+
+> **`/run` (sync) loads no tools and runs no loop.** If you assigned tools (or a
+> KB) and call `/run`, they never fire. Use **`/run/stream`** for any tool use.
+
+## 4. Tools — three types
+
+### Builtin (assign by name) — exactly eight
+
+`database_query`, `database_write`, `http_request`, `code_execute`,
+`storage_read`, `storage_write`, `web_search`, `web_scrape`.
+
+```json
+POST /api/agents/{id}/tools   { "tool_name": "database_query" }
+```
+
+| Tool | Notes / constraints |
+| --- | --- |
+| `database_query` | Read-only `SELECT` (single statement). Runs as **DB superuser**. 50k-char cap. |
+| `database_write` | INSERT/UPDATE/DELETE; UPDATE/DELETE require `WHERE`. Superuser. |
+| `http_request` | External HTTP, 10k-char cap, 30 s. **No SSRF protection** — can reach `localhost`/RFC1918/`169.254.169.254`. |
+| `code_execute` | Python/JS in a sandbox. Needs platform `CODE_SANDBOX_URL`. |
+| `storage_read` / `storage_write` | Project Storage list/download / upload UTF-8 text. |
+| `web_search` | Exa.ai. **Needs `EXA_API_KEY`** (Settings → Tools). |
+| `web_scrape` | Firecrawl → markdown. **Needs `FIRECRAWL_API_KEY`**; `include_images` uses a vision model. |
+
+> **Security:** `database_query`/`database_write` ignore the caller's identity and
+> run as superuser — never expose `/run*` to end-user JWTs (see §8). Prefer a
+> **custom tool** over builtin `http_request` for fixed endpoints (custom tools
+> enforce SSRF validation).
+
+### Custom (your own HTTP endpoint)
+
+```json
+POST /api/tools
+{ "name": "weather_lookup", "description": "Get current weather for a city",
+  "type": "http",
+  "input_schema": { "type": "object", "properties": { "city": { "type": "string" } }, "required": ["city"] },
+  "config": { "endpoint": "https://api.weather.com/v1/current", "method": "GET" } }
+```
+
+At call time the platform POSTs the tool arguments (method overridable via
+`config.method`) to `config.endpoint`, returns the response (≤10k chars, 30 s,
+SSRF-validated). **Top-level `endpoint_url`/`method`/`headers` are silently
+dropped — they must go inside `config`** (`config.endpoint`, `config.method`,
+`config.headers`, `config.timeout_seconds`). `type` is a free-form label, not used
+for dispatch; `input_schema` isn't validated at create time.
+
+### MCP servers (runtime tool discovery)
+
+```json
+POST /api/agents/{id}/mcp-servers
+{ "name": "GitHub Tools", "url": "https://mcp.example.com/github/mcp",
+  "transport": "http", "headers": { "Authorization": "Bearer ..." } }
+```
+
+At each run the platform calls `tools/list`, namespaces discovered tools as
+`mcp__{server_name}__{tool_name}`, and calls them via `tools/call` (30 s each).
+
+> - **`transport` defaults to `http`** (streamable HTTP). `sse` is accepted/stored
+>   but **not honored** by the current client — effectively HTTP-only.
+> - **Discovery is fail-open:** a broken `tools/list` drops that server's tools
+>   **silently**; the run continues with no error surfaced.
+> - Duplicate server `name` for an agent → 409. Control via `headers`/`enabled`.
+
+(Note: this MCP feature is the agent connecting to external tool providers — it is
+**not** a Powabase MCP server for your coding assistant, which doesn't exist yet.)
+
+## 5. `config_override` (PATCH a tool assignment)
+
+Body **must** use the key `config_override` (passing `config` is a silent no-op
+returning 200 unchanged).
+
+- **Database tools:** restrict tables — `{"config_override": {"schemas": {"public": ["users","orders"]}}}`.
+  System schemas (`ai`/`auth`/`storage`/`pg_*`) are rejected.
+- **Other builtins:** any key matching the tool's `input_schema` is **force-injected
+  into every call** (e.g. lock `web_search` to `{"max_results": 3, "include_domains": ["x.com"]}`).
+  Keys not in the schema are silently dropped.
+- **Custom/MCP tools:** `config_override` is not used (control via the Tool's
+  `config` / the MCP server's `headers`/`enabled`).
+
+## 6. Sessions
+
+A session is a multi-turn conversation holding a sequence of runs (each with input,
+response, tool calls, retrieved context, usage). **There is no create-session
+endpoint** — omit `session_id` on a run and capture it from the `start` SSE event;
+pass it back on later runs to continue.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/sessions/{id}` | Get a session |
+| GET | `/api/sessions/{id}/messages` | Assembled messages (each assistant message carries `retrieved_context`) |
+| GET | `/api/sessions/{id}/runs` | Runs in the session |
+| GET | `/api/sessions/{id}/runs/{run_id}/retrieved-context` | Context injected for one run |
+| DELETE | `/api/sessions/{id}` | Delete the session + its runs |
+
+Ownership is enforced; a session you don't own returns **404** (not 403), so you
+can't distinguish "missing" from "not yours". (This **agent session** is unrelated
+to the GoTrue **auth session** — see [studio-setup-and-human-handoff.md](studio-setup-and-human-handoff.md) / glossary.)
+
+## 7. Approval / human-in-the-loop
+
+Implemented as a `PreToolUse` hook of `type: "approval"`. When the agent calls a
+matching tool, the stream emits `approval_requested` (with `tool_name`,
+`tool_input`, `run_id`) and **blocks**. Resume:
+
+```json
+POST /api/agents/runs/{run_id}/approve   { "approved": true }   // or false to reject
+```
+
+Times out after **300 s** (configurable). Set the hook's `matcher` to a tool name
+to gate just that tool; omit `matcher` to require approval for **all** tool calls.
+
+```json
+POST /api/agents/{id}/hooks
+{ "event": "PreToolUse", "type": "approval", "matcher": "database_write",
+  "config": { "message": "Approve this write?" } }
+```
+
+## 8. Hooks (lifecycle)
+
+Events: `OnRunStart`, `PreToolUse`, `PostToolUse`, `PreResponse`, `OnRunComplete`.
+Types: `http` (POST event data to a URL; can allow/deny/modify; fail-open),
+`rule` (match `CONTAINS`/`STARTS_WITH`/`MATCHES`/`IN` against tool args),
+`approval` (see §7). Required on create: `event`, `type`, `config`.
+
+## 9. Run records & failed-run debugging
+
+`GET /api/agents/runs/{run_id}` returns `status`, `error`, `usage`,
+`input_messages`, `output_messages`, `content`, `retrieved_context`, `events`
+(persisted SSE events in order), `tool_calls`, `reasoning_steps`, plus
+`parent_orchestration_run_id` / `parent_workflow_execution_id` (null at top level).
+The exact `status` enum isn't documented — read it from a real run. The `error`
+field and the first failure-shaped entry in `events` are the highest-signal places
+to start; the full playbook (and the error→cause table) is in
+[billing-limits-and-debugging.md](billing-limits-and-debugging.md).
+
+## 10. Context handlers (RAG without an agent)
+
+Standalone retrieval: `POST /api/context-handlers` with
+`{ "query", "knowledge_bases": [{ "id", "top_k"? }], "max_context_tokens"? }`
+retrieves chunks from each KB for injection into your own prompts. GET to list/get.
+
+> **Asymmetry:** the request field is `knowledge_bases`; the response echoes it as
+> `knowledge_base_configs`, plus `metadata.query_enrichment` and per-KB `errors`.
+
+## 11. The per-user data pattern (important)
+
+Because tools run as superuser and end-user JWTs aren't forwarded, enforce
+per-user scope **yourself**: run the agent from your backend with the Service Role
+key and inject the user's allowed data via `context_items` (query `ai.chunks` under
+the user's JWT first), or via a custom tool that takes an opaque `session_token`
+your backend resolves to the user. Full recipes:
+[baas-database-rls.md](baas-database-rls.md) and the cookbook on `docs.powabase.ai`.

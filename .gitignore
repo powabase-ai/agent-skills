@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.pnpm-store/
+*.tgz
+*.tar.gz
+.DS_Store
+*.log

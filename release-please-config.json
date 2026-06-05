@@ -1,0 +1,29 @@
+{
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": true,
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "skip-changelog": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "package.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    },
+    "skills/powabase": {
+      "release-type": "simple",
+      "skip-github-release": true,
+      "changelog-path": "skills/powabase/CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "skills/powabase/SKILL.md",
+          "expressions": ["version: \"([0-9]+\\.[0-9]+\\.[0-9]+)\""]
+        }
+      ]
+    }
+  }
+}
