@@ -16,7 +16,7 @@
     "skills/powabase": {
       "release-type": "simple",
       "skip-github-release": true,
-      "changelog-path": "skills/powabase/CHANGELOG.md",
+      "changelog-path": "CHANGELOG.md",
       "extra-files": [
         {
           "type": "generic",
