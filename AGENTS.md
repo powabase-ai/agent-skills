@@ -44,7 +44,7 @@ description: What this skill does AND when to use it (this is the trigger).
 license: MIT
 metadata:
   author: powabase
-  version: "0.0.0"
+  version: "0.0.0" # x-release-please-version
 ---
 ```
 
@@ -53,7 +53,7 @@ metadata:
 | `name`        | Yes      | 1–64 chars. Lowercase alphanumeric + single hyphens. Must match the dir name. |
 | `description` | Yes      | 1–1024 chars. Must state what the skill does **and** when to use it.         |
 | `license`     | No       | License name.                                                               |
-| `metadata`    | No       | Free-form. Always include `version: "0.0.0"` — Release Please bumps it.      |
+| `metadata`    | No       | Free-form. Include `version: "0.0.0"` with an `# x-release-please-version` comment so Release Please bumps it. |
 
 The `description` is the **primary trigger** — Claude reads it to decide whether
 to activate the skill, so pack it with concrete nouns/contexts. Do **not** put
@@ -88,8 +88,8 @@ and push depth into `references/`. Write imperatively. Challenge every paragraph
    [`.release-please-manifest.json`](.release-please-manifest.json) so its
    `metadata.version` stays in sync.
 4. `pnpm test`
-5. Commit with a `feat:` prefix so Release Please bumps it to `0.1.0` on first
-   release.
+5. Commit with a `feat:` prefix so Release Please picks it up. (A brand-new
+   component's first release is `1.0.0`, regardless of `feat`/`fix`.)
 
 ## Releases
 
