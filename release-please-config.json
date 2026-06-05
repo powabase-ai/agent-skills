@@ -30,8 +30,7 @@
       "extra-files": [
         {
           "type": "generic",
-          "path": "skills/powabase/SKILL.md",
-          "expressions": ["version: \"([0-9]+\\.[0-9]+\\.[0-9]+)\""]
+          "path": "SKILL.md"
         }
       ]
     }
