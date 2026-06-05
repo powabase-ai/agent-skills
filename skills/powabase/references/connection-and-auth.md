@@ -107,7 +107,8 @@ For migrations, ORMs, or any tool speaking the Postgres wire protocol, use the
 psql "{POSTGRES_URL}"     # Connect modal → Database URL
 ```
 
-Gotcha: the username and database are both `<ref>` (not `postgres`), the pooler is
+Gotcha: the username and database are both `<ref>` (not `postgres`), the role you
+connect as is `supabase_admin` (full ownership, bypasses RLS), the pooler is
 PgBouncer in **transaction mode**, and the port is `5432`. Copy the string
 verbatim. Details and pooler caveats: [baas-database-rls.md](baas-database-rls.md).
 

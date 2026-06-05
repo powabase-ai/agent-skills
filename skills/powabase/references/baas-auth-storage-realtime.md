@@ -18,6 +18,7 @@ Header sets: unauthenticated calls (signup/signin/recover/OAuth) use `apikey: <A
 | POST | `/auth/v1/signup` | Create user (`email`/`phone` + `password`; `data` → user_metadata) |
 | POST | `/auth/v1/token?grant_type=password` | Sign in → tokens |
 | POST | `/auth/v1/token?grant_type=refresh_token` | Refresh (single-use refresh token) |
+| POST | `/auth/v1/token?grant_type=pkce` | Exchange a PKCE auth code for a session (OAuth / magic-link code flow) |
 | POST | `/auth/v1/otp` / `/auth/v1/verify` | Magic link / OTP send & verify |
 | POST | `/auth/v1/recover` | Password-reset email |
 | GET | `/auth/v1/authorize?provider=...` | Start OAuth (302 to provider) |
@@ -37,9 +38,11 @@ UUID (→ `auth.uid()`).
 > `app_metadata`, which only an admin can set (`PUT /auth/v1/admin/users/{id}` with
 > the Service Role key). RLS reads them via `auth.jwt()`.
 
-**Roles:** `anon` (Anon key, respects RLS), `authenticated` (signed-in user,
-respects RLS), `service_role` (Service Role key, **BYPASSRLS**). OAuth supports ~20
-providers (`google`, `github`, `apple`, `azure`, ...).
+**Roles (four):** `anon` (Anon key, respects RLS), `authenticated` (signed-in user,
+respects RLS), `service_role` (Service Role key, **BYPASSRLS**), and `supabase_admin`
+(the direct-Postgres owner via the Database URL — **BYPASSRLS**, not a GoTrue JWT;
+migrations/admin). OAuth supports ~20 providers (`google`, `github`, `apple`,
+`azure`, ...).
 
 **Defaults to know (may be operator-tuned):** email auto-confirm may be **on** (no
 verification email); SMTP may be unconfigured (recovery/magic-link silently no-op);
@@ -71,7 +74,9 @@ uploads; Service Role for admin). Metadata lives in `storage.buckets` /
 | POST | `/storage/v1/object/copy` · `/move` | Copy / move |
 | DELETE | `/storage/v1/object/{bucket}/{path}` | Delete |
 | POST | `/storage/v1/object/sign/{bucket}/{path}` | Mint a signed download URL (`expiresIn`, max 7 days) |
+| POST | `/storage/v1/object/sign` | Batch-sign many paths (`{paths:[...], expiresIn}`) |
 | POST | `/storage/v1/object/upload/sign/{bucket}/{path}` | Mint a signed upload URL |
+| GET | `/storage/v1/render/image/{public\|authenticated\|sign}/{bucket}/{path}` | On-the-fly image transform (`?width&height&resize&quality&format`) |
 
 > - **50 MB per-request limit → 413.** For larger files use **TUS resumable
 >   uploads** at `/storage/v1/upload/resumable` with a TUS client; keep each chunk
@@ -109,7 +114,10 @@ Frames are Phoenix Channels envelopes: `{ topic, event, payload, ref }`. Join wi
 `phx_join` (config: `broadcast`, `presence`, `postgres_changes: [{event, schema,
 table, filter}]`, `private`). Server replies `phx_reply`. Private channels
 (`config: { private: true }`) require a matching SELECT policy on
-`realtime.messages`.
+`realtime.messages`. To **send** a broadcast over the socket the frame `event` is
+literally `"broadcast"` and its `payload` nests `{ type: "broadcast", event:
+"<your-type>", payload: {...} }` (presence updates use a `presence` frame with
+`{ action: "track" | "untrack", ... }`).
 
 > - **`postgres_changes` deliver nothing until you create the publication** — it is
 >   **not** set up by default:

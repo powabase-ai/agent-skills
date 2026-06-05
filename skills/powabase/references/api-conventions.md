@@ -77,6 +77,11 @@ async function normalizeError(res: Response): Promise<NormalizedError> {
 }
 ```
 
+> **Streaming endpoints fail at HTTP 200.** `/run/stream` and `/execute/stream`
+> return `200` and surface failures as an SSE `error` event (e.g.
+> `data: {"type":"error", ...}`), not an HTTP error status. Check the event stream,
+> not just the status code.
+
 ## 5. Pagination
 
 - **Agentic `/api/*`** — query params `?limit=&offset=`; responses include `total`.
@@ -129,11 +134,12 @@ constant in your client futureproofs this.
 ## 10. Retry policy
 
 Retry **only** transient statuses: `503` (e.g. billing service unreachable) and
-`429` (rate limit). Do **not** retry `402` (out of credits), other `4xx`, or `401`.
+`429` (rate limit — today only on workflow `/execute`, 20/min/user). Do **not**
+retry `402` (out of credits), other `4xx`, or `401`.
 
 ```typescript
 async function withRetry(fn: () => Promise<Response>): Promise<Response> {
-  const delays = [3000, 6000, 12000, 30000]; // ms
+  const delays = [3000, 6000, 12000, 30000, 30000, 30000]; // ms
   for (let i = 0; i <= delays.length; i++) {
     const res = await fn();
     if (res.ok) return res;

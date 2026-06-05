@@ -15,11 +15,12 @@ lines. The same buffering rules apply to all three.
 | `tool_call` | `tool_name`, `arguments` | Agent is calling a tool |
 | `tool_result` | `tool_name`, `result` | Tool finished |
 | `reasoning_delta` | `delta` | Per-token reasoning (only if `reasoning_requested`; forwarded only) |
-| `reasoning` / `reasoning_summary` | `text` / `summary` | Persisted reasoning trace |
+| `reasoning` | `text` | Persisted reasoning segment |
+| `reasoning_summary` | `summary` | Final summarized reasoning at end of a step |
 | `approval_requested` | `tool_name`, `tool_input` | Paused for approval (see agents reference) |
 | `context_handler_created` | `context_handler_id` | A retrieval ran mid-run (citation panel) |
 | `complete` | `run_id`, `content`, `usage` | Run finished |
-| `error` | `message` | Error during execution |
+| `error` | `message`, `code?` | Error (`code` e.g. `rate_limited`, `context_length_exceeded`) |
 
 **Persisted vs forwarded-only:** `content_delta` and `reasoning_delta` are
 per-token deltas that are **not** persisted individually — replaying a run via
@@ -29,8 +30,9 @@ Everything else is persisted.
 ## 2. Orchestration events
 
 Agent events **plus** delegation: `orchestration_started`, `delegation_started` /
-`delegation_completed` (supervisor: which entity + usage), `sequential_step`
-(pipeline progress). Use these to show which agent is currently working.
+`delegation_completed` (supervisor; payload field `agent` = the entity name, plus
+usage), `sequential_step` (pipeline progress). Use these to show which agent is
+currently working.
 
 ## 3. Workflow events (`/api/workflows/{id}/execute/stream`)
 

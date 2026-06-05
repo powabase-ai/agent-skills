@@ -12,7 +12,7 @@ over SSE. All paths under `{BASE_URL}` with two-header auth.
 | GET / **PATCH** / DELETE | `/api/agents/{id}` | Get / update / delete |
 | POST / GET | `/api/agents/{id}/tools` | Assign / list tool assignments |
 | **PATCH** / DELETE | `/api/agents/{id}/tools/{assignment_id}` | Update `config_override` / remove |
-| POST / GET | `/api/agents/{id}/knowledge-bases` | Link / list KBs (link auto-adds a `knowledge_search` tool) |
+| POST / GET | `/api/agents/{id}/knowledge-bases` | Link / list KBs (link auto-adds a `knowledge_search` tool; multiple KBs share one tool with a `knowledge_base_names` filter) |
 | DELETE | `/api/agents/{id}/knowledge-bases/{assignment_id}` | Unlink a KB |
 | POST / GET | `/api/agents/{id}/mcp-servers` | Add / list MCP servers |
 | **PUT** / DELETE | `/api/agents/{id}/mcp-servers/{server_id}` | Update / remove an MCP server |
@@ -87,10 +87,10 @@ POST /api/agents/{id}/tools   { "tool_name": "database_query" }
 | `database_query` | Read-only `SELECT` (single statement). Runs as **DB superuser**. 50k-char cap. |
 | `database_write` | INSERT/UPDATE/DELETE; UPDATE/DELETE require `WHERE`. Superuser. |
 | `http_request` | External HTTP, 10k-char cap, 30 s. **No SSRF protection** — can reach `localhost`/RFC1918/`169.254.169.254`. |
-| `code_execute` | Python/JS in a sandbox. Needs platform `CODE_SANDBOX_URL`. |
-| `storage_read` / `storage_write` | Project Storage list/download / upload UTF-8 text. |
-| `web_search` | Exa.ai. **Needs `EXA_API_KEY`** (Settings → Tools). |
-| `web_scrape` | Firecrawl → markdown. **Needs `FIRECRAWL_API_KEY`**; `include_images` uses a vision model. |
+| `code_execute` | Python/JS in a sandbox. Needs platform `CODE_SANDBOX_URL` (+ optional `CODE_SANDBOX_API_KEY`); else returns *"Code sandbox is not configured"*. |
+| `storage_read` / `storage_write` | Project Storage list/download / upload UTF-8 text. `storage_read` returns a **signed URL** for binary files (inline content only for text). |
+| `web_search` | Exa.ai (1–10 results, ~20–50k chars). **Needs `EXA_API_KEY`** (Settings → Tools). |
+| `web_scrape` | Firecrawl → markdown (≤200k chars — exempt from the 50k cap). **Needs `FIRECRAWL_API_KEY`**; `include_images` uses `gpt-4.1-mini` vision; direct image URLs bypass Firecrawl. |
 
 > **Security:** `database_query`/`database_write` ignore the caller's identity and
 > run as superuser — never expose `/run*` to end-user JWTs (see §8). Prefer a
@@ -129,7 +129,8 @@ At each run the platform calls `tools/list`, namespaces discovered tools as
 >   but **not honored** by the current client — effectively HTTP-only.
 > - **Discovery is fail-open:** a broken `tools/list` drops that server's tools
 >   **silently**; the run continues with no error surfaced.
-> - Duplicate server `name` for an agent → 409. Control via `headers`/`enabled`.
+> - Duplicate server `name` for an agent → 409. Per-server control via `headers` and
+>   `enabled` (`enabled: false` skips discovery entirely — no `tools/list`/`tools/call`).
 
 (Note: this MCP feature is the agent connecting to external tool providers — it is
 **not** a Powabase MCP server for your coding assistant, which doesn't exist yet.)

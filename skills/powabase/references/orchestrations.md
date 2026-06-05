@@ -63,7 +63,8 @@ POST /api/orchestrations/{id}/entities
 
 Extends the agent SSE model with delegation events: `start` (→ `run_id`,
 `session_id`), `orchestration_started`, `delegation_started` /
-`delegation_completed` (supervisor), `sequential_step` (sequential), entity
+`delegation_completed` (supervisor; payload field **`agent`** = the entity name,
+plus the child run ID / usage), `sequential_step` (sequential), entity
 `tool_call`/`tool_result`, `chunk` (final text, field `content`), `complete`
 (`content`, `usage`, `steps`), `error`. Parser details:
 [streaming-sse.md](streaming-sse.md).

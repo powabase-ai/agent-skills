@@ -36,7 +36,12 @@ then. (Docs label the status both 400 and 402 in different places — verify liv
 Powabase bills in **credits**, charged per billable op (agent runs and each tool
 call, orchestration/workflow runs and per-block, indexing per 1K tokens, extraction
 per page, web search/scrape, enrichment, KB search). Free tier has a **hard cap**;
-credits refill on the first of each UTC month. Charges carry internal idempotency
+credits refill on the first of each UTC month. Most ops check your **full** balance
+before dispatch (→ 402), but source extraction and KB indexing only check that the
+balance is positive and charge on completion — so a long indexing job can finish as
+you run out while the *next* op is blocked. With BYOK, user-facing LLM tokens aren't
+charged, but platform-internal LLM calls (indexing, enrichment, query-rewrite,
+rerank) always are. Charges carry internal idempotency
 keys, so a retried request with the same key won't double-bill (but the API doesn't
 honor your `Idempotency-Key` header — see [api-conventions.md](api-conventions.md)).
 
@@ -107,7 +112,7 @@ is spread across endpoints. Check in this order:
 | `billing service unreachable` | 503, transient. Retry with backoff. |
 | `Missing API Key` / `provider_key_decrypt_failed` | No BYOK or platform key for the model's provider. Set one (Settings → LLM Provider Keys) or re-upsert. |
 | `Exa API key not configured` | `web_search` without `EXA_API_KEY`. Set it (Settings → Tools). |
-| `Sandbox is not configured` | `code_execute` without the platform sandbox (`CODE_SANDBOX_URL`). Operator setup. |
+| `Code sandbox is not configured` | `code_execute` without the platform sandbox (`CODE_SANDBOX_URL`). Operator setup. |
 | `Doom loop detected` | Agent called the same tool with identical args 3× — usually it's misreading a tool result. Inspect that tool's `result`. |
 | `Output truncated` after 3 retries | Model hit `max_tokens` repeatedly. Raise it or shorten the system prompt. |
 | Empty `output_messages`, `status: completed` | Often a multimodal context sent to a non-multimodal model. Check model capabilities. |

@@ -67,10 +67,14 @@ Every `ai.*` table has RLS enabled, but the default policies are **project-wide*
 > other's agents, KBs, and workflows.
 
 To make `ai.*` multi-tenant-safe, do one of: (a) tighten the default policies;
-(b) only let end users reach the typed `/api/*` (which enforces ownership in the
-backend with the Service Role key); or (c) never expose `ai.*` to end users at all.
-The typed `/api/*` endpoints use the Service Role key and their own ownership
-checks, so `ai.*` RLS doesn't affect them — it only governs direct PostgREST reads.
+(b) gate `ai.*` behind your own backend; or (c) never expose `ai.*` to end users.
+The typed `/api/*` endpoints use the Service Role key and enforce **session**
+ownership (a session/run you don't own returns 404), so `ai.*` RLS doesn't govern
+them. But that ownership check does **not** sandbox an agent's *tools*: a
+`database_query`/`database_write` call runs on the superuser connection with no
+per-user filter. So **never expose `/api/agents/{id}/run/stream` to clients with
+their own JWTs** — run agents from a trusted backend and inject per-user scope
+yourself (§8).
 
 ## 4. PostgREST patterns
 
@@ -108,10 +112,14 @@ Use the **Database URL** (Connect modal). It connects through PgBouncer in
 >   the URL verbatim — `postgres:postgres@.../postgres` muscle memory is wrong here.
 > - **Transaction-mode pooling breaks session state:** prepared statements (disable
 >   in your driver — e.g. Prisma `?pgbouncer=true`, `postgres.js` `prepare: false`,
->   psycopg `prepare_threshold=None`), **LISTEN/NOTIFY** (use Realtime instead), and
->   bare `SET` (use `SET LOCAL` inside a transaction, or pass settings on the
->   connection string). For LISTEN/NOTIFY or session features, use a **direct
->   (non-pooled)** connection where available.
+>   psycopg `prepare_threshold=None`), **LISTEN/NOTIFY** (use Realtime instead),
+>   bare `SET` (use `SET LOCAL` in a transaction), advisory locks
+>   (`pg_advisory_xact_lock`), and temp tables across statements. **There is no
+>   external non-pooled endpoint** — un-pooled Postgres is reachable only from
+>   inside the project's cluster namespace, so for session-state work wrap it all in
+>   one transaction (or contact support); for notifications use Realtime.
+> - Pool budget: **20 server connections per project**; size your client pool to
+>   ~10 and close clients per request on serverless.
 > - The Database URL embeds the password in cleartext — server-side only; rotate via
 >   the Studio if it leaks.
 
@@ -127,9 +135,10 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA extensions;
 ```
 
 Anon/authenticated/service_role lack `CREATE` — you must use the Database URL.
-Objects often land in the `extensions` schema; qualify calls
-(`extensions.http_post(...)`) or add `extensions` to `search_path`. **`pg_cron` is
-not available** — use a workflow with a cron trigger instead.
+**`vector` and `pgcrypto` live in `public`** (so `gen_random_uuid()` is
+unqualified), while `pg_net`/`uuid-ossp` and anything you install land in
+`extensions` — qualify those (`extensions.http_post(...)`) or add `extensions` to
+`search_path`. **`pg_cron` is not available** — use a workflow cron trigger instead.
 
 ## 7. When to use what
 

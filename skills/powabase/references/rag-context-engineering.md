@@ -96,6 +96,12 @@ If `indexed_source_ids` is given it wins; else `failed_only` reindexes only fail
 empty body reindexes everything. Reindex **destroys and recreates** all chunks/
 nodes/JSON — the KB stays searchable but may be incomplete until done.
 
+**Async contracts:** `build-bm25` returns `202 {task_id}` — poll the KB's
+`bm25_status`. `/items` takes `source_ids` (the **source** UUIDs, not
+`indexed_source_id`s; `limit` default 1000, cap 10000). Cancel endpoints return
+`409` unless the task is still `pending`/`extracting` (sources) or
+`pending`/`indexing` (KB).
+
 ## 3. Search
 
 `POST /api/knowledge-bases/{id}/search`:
@@ -151,9 +157,11 @@ Key config (in `indexing_config`, or `indexing_config.extra` for page/graph/doc2
 | `hybrid` (**recommended**) | Vector + BM25 fused via Reciprocal Rank Fusion (`k=60`); `vector_weight` balances | Production default, robust |
 | `tree_search` | LLM picks docs then sections from the ToC | **`page_index` KBs only** |
 
-`tree_search` reads the PageIndex ToC/nodes tables — it is invalid on
-`graph_index` (use hybrid there). `full_text`/`hybrid` require a BM25 index;
-rebuild it with `POST .../build-bm25` (vector-only KBs → 400).
+`tree_search` reads the PageIndex ToC/nodes tables — treat it as **PageIndex-only**
+and use hybrid on `graph_index`. (The docs are internally inconsistent on whether
+GraphIndex also supports tree_search; the strategy/Info-box guidance says no — verify
+live if you need it.) `full_text`/`hybrid` require a BM25 index; rebuild it with
+`POST .../build-bm25` (vector-only KBs → 400).
 
 ## 6. Embeddings & reranking
 
@@ -179,20 +187,12 @@ rebuild it with `POST .../build-bm25` (vector-only KBs → 400).
 | Cross-referenced corpora | `graph_index` | `hybrid` |
 | Invoices / forms / structured fields | `doc2json` | `vector_search` (read `/items`) |
 
-## 8. Gotchas
+## 8. Gotchas (quick checklist)
 
-- **`source_id` vs `indexed_source_id`** — see §2.
-- **`indexing_config`/`retrieval_config` merge** over strategy defaults; you don't
-  need to send the whole object.
-- **`chunk_overlap` vs `overlap`** parameter name is inconsistent in the docs;
-  examples use `overlap`. Verify against the live page.
-- **`tree_search` is PageIndex-only**; **`build-bm25` is hybrid/full_text-only**.
-- **`text-embedding-3-large` (3072) exceeds HNSW's 2000-dim limit** → sequential
-  scan; prefer 1536-dim models for large KBs.
-- **`full_document` summary truncates at ~32K tokens.**
-- **Reindex deletes and recreates** all indexed artifacts.
-- **DELETE-link removes derivative rows** (chunks/embeddings/nodes/etc.) but leaves
-  the `ai.sources` row — the source can be re-added elsewhere.
-- **Non-OpenAI embedding/reranker providers need platform keys** set by an admin.
-- **`GET /api/config/kb-defaults`** is the authoritative source for selectable
-  strategies/rerankers/extraction methods — prefer it over hardcoding.
+- **`source_id` vs `indexed_source_id`** (§2) — the #1 source of 404s.
+- **`chunk_overlap` vs `overlap`** — docs inconsistent; examples use `overlap`. Verify live.
+- **`tree_search` ⇒ PageIndex only; `build-bm25`/`full_text`/`hybrid` ⇒ need a BM25 index.**
+- **`text-embedding-3-large` (3072) > HNSW's 2000-dim limit** → slow sequential scan.
+- **`full_document` summary truncates at ~32K tokens**; reindex destroys + recreates all artifacts.
+- **Non-OpenAI embedding/reranker providers need platform keys** (admin).
+- **`GET /api/config/kb-defaults`** is authoritative for selectable options — don't hardcode.

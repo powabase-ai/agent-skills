@@ -49,10 +49,11 @@ block in a workflow; a workflow can call a KB search — they compose.
 
 > ### ⚠️ Security must-knows (read before exposing anything to end users)
 > - **Run agents from a trusted backend only.** Powabase does **not** forward
->   end-user JWTs to agent tools — `database_query`/`database_write` run as the DB
->   **superuser** regardless of caller. Exposing `/api/agents/{id}/run*` to clients
->   with their own tokens gives them full project-wide DB access. Inject per-user
->   data yourself (via `context_items` or a custom tool). See [agents-and-tools.md](references/agents-and-tools.md).
+>   end-user JWTs to agent tools — `database_query`/`database_write` run on the DB
+>   **superuser connection** (RLS bypassed) regardless of caller. Exposing
+>   `/api/agents/{id}/run/stream` (the tool-bearing path) to clients with their own
+>   tokens gives them full project-wide DB access. Inject per-user data yourself
+>   (via `context_items` or a custom tool). See [agents-and-tools.md](references/agents-and-tools.md).
 > - **`ai.*` RLS is project-wide, not per-user.** Any signed-in (`authenticated`)
 >   user can read every agent/KB/workflow in the project; only session tables
 >   filter by `user_id`. See [baas-database-rls.md](references/baas-database-rls.md).
@@ -184,19 +185,13 @@ exactly where to go** (full table in [studio-setup-and-human-handoff.md](referen
 
 ## Powabase MCP server
 
-<!-- PLACEHOLDER — Powabase does not ship an MCP server yet (unlike Supabase). -->
-**Coming soon.** There is currently **no first-party Powabase MCP server or CLI**.
-The supported interface today is **raw HTTP** against the documented endpoints,
-plus fetching the live docs. Do not assume MCP tools named `powabase_*` exist.
+<!-- PLACEHOLDER — Powabase ships no MCP server yet (unlike Supabase); fill in URL / .mcp.json / auth / tool list when it launches. -->
+**Coming soon — none exists today.** There is no first-party Powabase MCP server or
+CLI. Build requests over raw HTTP (principle #1) and verify shapes against the live
+docs. Don't assume tools named `powabase_*` exist.
 
-When the MCP server ships, this section will document its URL, the `.mcp.json`
-config, the OAuth/auth flow, and the tools it exposes — and agents should prefer
-it for discovery and schema lookups over hand-built requests. Until then, build
-requests from the references below and verify shapes against `https://docs.powabase.ai`.
-
-> Note: "MCP servers" *as agent tools* (external tool providers an agent connects
-> to) are a real, separate Powabase feature — see [agents-and-tools.md](references/agents-and-tools.md).
-> That is unrelated to a Powabase MCP server for your coding assistant.
+> Separately, an agent can connect to *external* MCP servers as runtime tools — a
+> real Powabase feature ([agents-and-tools.md](references/agents-and-tools.md)), unrelated to a Powabase MCP server for your assistant.
 
 ## References
 
