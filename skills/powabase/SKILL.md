@@ -134,6 +134,12 @@ The reference end-to-end pattern. Each step links to depth.
 4. **Chat (streaming)** `POST /api/agents/{id}/run/stream` `{message}` — consume
    SSE; capture `session_id` from the `start` event for multi-turn.
 
+> **Extraction artifacts are reusable beyond RAG.** Every Source also exposes
+> **derivatives** — per-page images (rendered PNGs), per-page text, and whole-doc
+> markdown/text — that you can render directly in your own UI (e.g. a document
+> viewer). Reach for these before reinventing PDF rendering. See
+> [rag-context-engineering.md](references/rag-context-engineering.md) §1.
+
 Details: [rag-context-engineering.md](references/rag-context-engineering.md),
 [agents-and-tools.md](references/agents-and-tools.md), and the SSE parser in
 [streaming-sse.md](references/streaming-sse.md).

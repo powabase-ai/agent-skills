@@ -76,6 +76,48 @@ verify if it matters.)
 `opendataloader` / `fitz` / `pdfplumber` (local, no key). `paddleocr`/`lighton` are
 **not** in the `auto` chain — request them explicitly.
 
+### Derivatives are reusable app primitives (build a document viewer)
+
+Extraction doesn't just feed RAG — it produces **derivatives you can render directly
+in your own UI**. This is how you build a PDF-viewer / document-reader experience
+without bundling a third-party PDF library. `GET /api/sources/{id}` returns a
+`derivatives` JSONB plus `auto_metadata.page_count`:
+
+```jsonc
+"derivatives": {
+  "markdown":  [{ "storage_path": "...", "format": "markdown" }],          // whole-doc markdown
+  "text":      [{ "storage_path": "...", "format": "plain" }],             // whole-doc plain text
+  "page_text": [{ "storage_path": "...", "page": 1, "format": "plain" }],  // one per page (page is 1-based)
+  "image":     [{ "storage_path": "...", "page": 1, "format": "png",
+                  "metadata": { "width": 816, "height": 1056, "dpi": 150 } }]  // one rendered page image per page
+}
+```
+
+- **Page images:** PDF extraction renders **one PNG per page (~150 DPI)** into
+  `derivatives.image` (most extractor paths — `fitz`/`opendataloader`/full-PDF OCR;
+  the original file is used directly for image sources). Don't assume they always
+  exist — **check `derivatives.image` is present**; if a path didn't render them,
+  `reextract` with a model that does. Use these as the visual layer of your viewer.
+- **Fetch for the viewer** (both stream the bytes under the two-header `/api/*` auth):
+  - **Page image:** `GET /api/sources/{id}/derivatives/image/download?index=N` (`index`
+    is **0-based** into the `image` array — order matches pages).
+  - **Page text layer:** `GET /api/sources/{id}/page-texts?page=N` (**1-based**;
+    omit `page` for all pages) → `{ text, page, count }`. Use it for search and a
+    selectable/copyable text overlay.
+  - **Pagination:** `auto_metadata.page_count`.
+- **Serving to a browser:** the derivative/page-text endpoints **stream bytes**
+  through the authenticated `/api/*` surface (the `sources` bucket is **private**;
+  there is **no public or signed URL** for derivatives). So a frontend either calls
+  these endpoints with the user's session, **or** — because source access is
+  **project-wide, not per-user** (see [baas-database-rls.md](baas-database-rls.md)) —
+  for a multi-tenant app **proxy them through your backend and enforce ownership
+  there**. An `<img src="/api/sources/{id}/derivatives/image/download?index=0">` works
+  only if that request carries valid auth on your origin.
+- **Limitation — no positional/bbox data.** Extraction stores plain page text, not
+  per-character coordinates. You get *page image + plain-text search/overlay*, not a
+  pixel-aligned selection layer. For true text-on-image selection you'd OCR the page
+  image yourself (e.g. Tesseract → word boxes) on top of these artifacts.
+
 ## 2. Knowledge Bases
 
 | Method | Path | Purpose |
