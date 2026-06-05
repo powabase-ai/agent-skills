@@ -90,16 +90,44 @@ them, **ask the user to open it and paste the Project URL + Service Role Key**.
 Full detail: [connection-and-auth.md](references/connection-and-auth.md). Shared
 conventions (errors, pagination, PUT vs PATCH, headers): [api-conventions.md](references/api-conventions.md).
 
+## Custom database tables — the BaaS core
+
+Powabase is a **full Supabase-style backend first**, AI modules second. Every
+project ships an isolated Postgres + **PostgREST** + GoTrue + Storage + Realtime —
+so for ordinary app data (users' profiles, todos, orders, app state) you **create
+your own `public` tables and use them directly**; don't model app data as agents/KBs.
+This should be your default reach for anything that isn't RAG/agents/workflows.
+
+- **Define tables** via the Database URL (psql/ORM/migrations) or Studio SQL — your
+  `public` schema is yours to migrate.
+- **CRUD over PostgREST** at `/rest/v1/{table}` — `GET ?col=eq.val&select=...&order=`,
+  `POST`, `PATCH ?id=eq.{id}`, `DELETE ?id=eq.{id}` (filters **required** on
+  write), embeds (`select=*,relation(*)`), upsert (`Prefer: resolution=merge-duplicates`),
+  RPC (`/rest/v1/rpc/{fn}`). Two-header auth applies.
+- **The Anon (Publishable) key is browser-safe** for these calls **as long as RLS is
+  on** — and **new `public` tables have RLS OFF by default**, so a fresh table is
+  world-readable/writable to anyone with the Anon key until you `ENABLE ROW LEVEL
+  SECURITY` and add policies. Turn RLS on as step one for any user-facing table.
+- An agent can read/write these same tables via its `database_query`/`database_write`
+  tools — but those run as **DB superuser (RLS bypassed)**; see the security box.
+
+Full surface — schemas, RLS posture, PostgREST patterns, direct Postgres/pooler,
+extensions: [baas-database-rls.md](references/baas-database-rls.md).
+
 ## Canonical RAG flow (upload → index → agent → stream)
 
 The reference end-to-end pattern. Each step links to depth.
 
 1. **Upload** `POST /api/sources/upload` (multipart `file`) → poll
-   `GET /api/sources/{id}` until `extraction_status` is terminal (`extracted`,
-   `attention_required`, `failed`, `cancelled`).
+   `GET /api/sources/{id}` until `extraction_status` is terminal. **Extraction is a
+   barrier:** the next step needs `extracted` specifically. Re-uploading identical
+   bytes returns **409 `duplicate_source`** (project-wide dedup) — reuse it, don't
+   treat it as an error. See [rag-context-engineering.md](references/rag-context-engineering.md) §1.
 2. **Create KB** `POST /api/knowledge-bases` `{name}` → **add source**
-   `POST /api/knowledge-bases/{kb_id}/sources` `{source_id}` (this triggers
-   indexing automatically). Poll until the indexed source is `indexed`.
+   `POST /api/knowledge-bases/{kb_id}/sources` `{source_id}` (triggers indexing).
+   This **400s unless the source is `extracted`** (`attention_required` is rejected —
+   re-extract with OCR). Re-adding the same source is an idempotent re-index. Poll
+   until the indexed source is `indexed`.
 3. **Create agent** `POST /api/agents` `{name, model, system_prompt, settings}` →
    **link KB** `POST /api/agents/{id}/knowledge-bases` `{knowledge_base_id}` (the
    agent auto-gets a `knowledge_search` tool).
