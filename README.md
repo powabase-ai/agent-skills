@@ -15,27 +15,25 @@ Claude Code and any agent that supports the
 
 ## Installation
 
-### With the `skills` CLI
+`SKILL.md` is a [cross-vendor open standard](https://agentskills.io), so the same
+skill installs across Anthropic, OpenAI, Google, and other coding agents.
 
-```bash
-# Install the skill
-npx skills add powabase-ai/agent-skills
-```
+| Tool | Install |
+| --- | --- |
+| **Any agent** (cross-agent installer) | `npx skills add powabase-ai/agent-skills` |
+| **GitHub Copilot / GitHub CLI** | `gh skill install powabase-ai/agent-skills` |
+| **Google Gemini CLI** | `gemini extensions install https://github.com/powabase-ai/agent-skills` |
+| **Claude Code** (plugin) | `claude plugin marketplace add powabase-ai/agent-skills` then `claude plugin install powabase@powabase-agent-skills` |
+| **OpenAI Codex / Cursor / Windsurf / Cline / …** | use a cross-agent installer above, or copy `skills/powabase/` into the tool's skills directory |
 
-### As a Claude Code plugin
+The per-ecosystem manifests live in this repo: `.claude-plugin/marketplace.json`
+(Claude), `gemini-extension.json` + `GEMINI.md` (Gemini CLI), and
+`skills/powabase/agents/openai.yaml` (Codex) — all pointing at the single canonical
+skill at `skills/powabase/SKILL.md`.
 
-```bash
-# 1. Add this repo as a plugin marketplace
-claude plugin marketplace add powabase-ai/agent-skills
-
-# 2. Install the plugin
-claude plugin install powabase@powabase-agent-skills
-```
-
-### Manually
-
-Copy `skills/powabase/` into your agent's skills directory (for Claude Code,
-that's `.claude/skills/powabase/` in your project or `~/.claude/skills/`).
+See [PUBLISHING.md](PUBLISHING.md) for where this is listed, how to submit it to
+each marketplace, and the roadmap for the consumer marketplaces (ChatGPT Apps,
+Gemini Enterprise) that run through the forthcoming Powabase MCP server.
 
 ## Available skills
 

@@ -1,0 +1,14 @@
+# OpenAI Codex skill metadata — optional, extends the open Agent Skills standard.
+# The SKILL.md itself is the cross-vendor source of truth; this only adds Codex
+# UI/invocation hints. https://developers.openai.com/codex/skills
+interface:
+  display_name: Powabase
+  short_description: >-
+    Build on Powabase — RAG/knowledge bases, agents, orchestration, workflows,
+    and the Supabase-style BaaS layer.
+  default_prompt: >-
+    Help me build on Powabase (knowledge bases, agents, workflows, or the BaaS
+    layer) using its REST API.
+policy:
+  # Let Codex invoke the skill automatically when a task is clearly about Powabase.
+  allow_implicit_invocation: true

@@ -95,3 +95,29 @@ describe("plugin marketplace manifest", () => {
     }
   });
 });
+
+describe("gemini-extension.json (Gemini CLI manifest)", () => {
+  const manifestPath = join(ROOT, "gemini-extension.json");
+
+  it("is valid JSON with name, semver version, and a description", () => {
+    expect(existsSync(manifestPath)).toBe(true);
+    const ext = JSON.parse(readFileSync(manifestPath, "utf8"));
+    expect(ext.name).toMatch(NAME_RE);
+    expect(ext.version).toMatch(SEMVER_RE);
+    expect(typeof ext.description).toBe("string");
+    expect(ext.description.trim().length).toBeGreaterThan(0);
+  });
+});
+
+describe.each(skillNames)("Codex metadata: %s", (skillName) => {
+  const openaiYaml = join(SKILLS_DIR, skillName, "agents", "openai.yaml");
+
+  it("agents/openai.yaml is well-formed if present", () => {
+    if (!existsSync(openaiYaml)) return; // optional file
+    const text = readFileSync(openaiYaml, "utf8");
+    expect(text.trim().length).toBeGreaterThan(0);
+    // Lightweight structural check (no YAML dependency).
+    expect(text, "expected an `interface:` block").toMatch(/^interface:/m);
+    expect(text, "expected a `policy:` block").toMatch(/^policy:/m);
+  });
+});

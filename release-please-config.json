@@ -15,6 +15,11 @@
           "type": "json",
           "path": ".claude-plugin/marketplace.json",
           "jsonpath": "$.metadata.version"
+        },
+        {
+          "type": "json",
+          "path": "gemini-extension.json",
+          "jsonpath": "$.version"
         }
       ]
     },
