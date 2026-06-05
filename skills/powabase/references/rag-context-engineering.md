@@ -33,12 +33,31 @@ string), `extraction_model` (**PDF only**). Response:
   "extraction_status": "pending", "task_id": "celery-task-uuid" }
 ```
 
+> **Content dedup is automatic and project-wide.** Sources are deduped on a
+> `sha256` of the **raw file bytes** (a unique index on `ai.sources.content_hash`).
+> Re-uploading identical content — even under a different filename — does **not**
+> create a new source: upload returns **`409 duplicate_source`** with the existing
+> source in the body, and **no re-extraction runs** (the prior extraction is
+> reused). The same applies to `import-from-storage` / `import-url`. So **treat 409
+> as success, not error** — read the existing source and proceed:
+> ```python
+> r = requests.post(f"{BASE_URL}/api/sources/upload", headers=h, files={"file": data})
+> sid = (r.json()["id"] if r.status_code == 201
+>        else r.json()["duplicate"]["id"])   # 409 → reuse existing source
+> ```
+> This makes idempotent re-runs cheap, but means a naive `r.json()["id"]` crashes on
+> the second run of your script. Dedup is on **content**, not name — change the bytes
+> (even a byte) and you get a new source.
+
 **`extraction_status` enum** — `pending` → `extracting` → terminal one of
 `extracted` · `attention_required` · `failed` · `cancelled`.
 
-> `attention_required` is a **success-ish** terminal state (some pages failed but
-> the source is still indexable). Treat it as "done", not "retry". Poll until the
-> status is in the terminal set:
+> `attention_required` is a **terminal** state (extraction finished but quality is
+> suspect — e.g. a scanned PDF that fell back to a no-OCR extractor, yielding little
+> text). Treat it as "done polling", not "retry". **But it is NOT accepted for KB
+> indexing** — adding such a source to a KB returns 400 (see §2). To index it,
+> `POST /api/sources/{id}/reextract` with an OCR `extraction_model` (e.g. `mistral`)
+> until it reaches `extracted`. Poll until the status is in the terminal set:
 
 ```python
 TERMINAL = {"extracted", "attention_required", "failed", "cancelled"}
@@ -56,6 +75,48 @@ verify if it matters.)
 `MISTRAL_API_KEY`), `paddleocr` (needs key+base URL), `lighton` (needs key+base URL),
 `opendataloader` / `fitz` / `pdfplumber` (local, no key). `paddleocr`/`lighton` are
 **not** in the `auto` chain — request them explicitly.
+
+### Derivatives are reusable app primitives (build a document viewer)
+
+Extraction doesn't just feed RAG — it produces **derivatives you can render directly
+in your own UI**. This is how you build a PDF-viewer / document-reader experience
+without bundling a third-party PDF library. `GET /api/sources/{id}` returns a
+`derivatives` JSONB plus `auto_metadata.page_count`:
+
+```jsonc
+"derivatives": {
+  "markdown":  [{ "storage_path": "...", "format": "markdown" }],          // whole-doc markdown
+  "text":      [{ "storage_path": "...", "format": "plain" }],             // whole-doc plain text
+  "page_text": [{ "storage_path": "...", "page": 1, "format": "plain" }],  // one per page (page is 1-based)
+  "image":     [{ "storage_path": "...", "page": 1, "format": "png",
+                  "metadata": { "width": 816, "height": 1056, "dpi": 150 } }]  // one rendered page image per page
+}
+```
+
+- **Page images:** PDF extraction renders **one PNG per page (~150 DPI)** into
+  `derivatives.image` (most extractor paths — `fitz`/`opendataloader`/full-PDF OCR;
+  the original file is used directly for image sources). Don't assume they always
+  exist — **check `derivatives.image` is present**; if a path didn't render them,
+  `reextract` with a model that does. Use these as the visual layer of your viewer.
+- **Fetch for the viewer** (both stream the bytes under the two-header `/api/*` auth):
+  - **Page image:** `GET /api/sources/{id}/derivatives/image/download?index=N` (`index`
+    is **0-based** into the `image` array — order matches pages).
+  - **Page text layer:** `GET /api/sources/{id}/page-texts?page=N` (**1-based**;
+    omit `page` for all pages) → `{ text, page, count }`. Use it for search and a
+    selectable/copyable text overlay.
+  - **Pagination:** `auto_metadata.page_count`.
+- **Serving to a browser:** the derivative/page-text endpoints **stream bytes**
+  through the authenticated `/api/*` surface (the `sources` bucket is **private**;
+  there is **no public or signed URL** for derivatives). So a frontend either calls
+  these endpoints with the user's session, **or** — because source access is
+  **project-wide, not per-user** (see [baas-database-rls.md](baas-database-rls.md)) —
+  for a multi-tenant app **proxy them through your backend and enforce ownership
+  there**. An `<img src="/api/sources/{id}/derivatives/image/download?index=0">` works
+  only if that request carries valid auth on your origin.
+- **Limitation — no positional/bbox data.** Extraction stores plain page text, not
+  per-character coordinates. You get *page image + plain-text search/overlay*, not a
+  pixel-aligned selection layer. For true text-on-image selection you'd OCR the page
+  image yourself (e.g. Tesseract → word boxes) on top of these artifacts.
 
 ## 2. Knowledge Bases
 
@@ -96,6 +157,24 @@ defaults (not a full replace). Default strategy is `chunk_embed`.
 > }
 > ```
 > Only `indexing_config` changes (chunking/embedding model/strategy) require a reindex.
+
+> **Extraction is a hard barrier before indexing.** Upload and KB-add are two
+> async stages with a gap between them: a source must be fully **`extracted`**
+> before it can be added to a KB. `POST /knowledge-bases/{id}/sources` checks the
+> source's `extraction_status` and returns **400 `"Source must be extracted first
+> (status: ...)"`** for anything else — it does **not** queue or auto-index later.
+> Notably `attention_required` is **rejected** too (re-extract with OCR first, §1).
+> So the correct sequence is always: upload → **poll `GET /api/sources/{id}` to
+> `extracted`** → add to KB → poll the indexed source to `indexed`. There is no
+> single upload-extract-index endpoint; the client owns the polling.
+
+> **Adding a source to a KB is idempotent.** `indexed_sources` has a unique
+> `(knowledge_base_id, source_id)`, and add-source is an `ON CONFLICT … DO UPDATE`
+> upsert — re-adding the same `source_id` resets it to `pending` and **re-dispatches
+> indexing** (a deliberate way to re-index one source) rather than erroring or
+> duplicating. Returns `201` either way; the `id` is the existing `indexed_source_id`
+> on conflict. Combined with content dedup (§1), the whole upload→index pipeline is
+> safe to re-run.
 
 > **The two-IDs trap.** Adding a source uses `source_id` (the `ai.sources` UUID).
 > But cancel / reindex / DELETE-link use `indexed_source_id` — the
@@ -269,6 +348,11 @@ preserving layout, tables, charts, stamps, handwriting that text extraction lose
 
 ## 8. Gotchas (quick checklist)
 
+- **Extraction → indexing is a barrier** (§2): add-to-KB needs `extraction_status
+  == "extracted"` (poll first) and **400s** otherwise — including `attention_required`.
+- **Content dedup is project-wide** (§1): re-upload of identical bytes → **409
+  `duplicate_source`** (reuse the returned source; no re-extraction). Re-adding a
+  source to a KB is an idempotent upsert that **re-dispatches indexing**.
 - **`source_id` vs `indexed_source_id`** (§2) — the #1 source of 404s.
 - **`chunk_overlap` vs `overlap`** — docs inconsistent; examples use `overlap`. Verify live.
 - **`tree_search` ⇒ PageIndex only; `build-bm25`/`full_text`/`hybrid` ⇒ need a BM25 index.**
