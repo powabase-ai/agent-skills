@@ -150,7 +150,7 @@ The Copilot generates/edits a workflow's blocks and edges from a chat descriptio
 | GET | `/api/copilot/sessions/{id}/messages` | Conversation history |
 | POST | `/api/copilot/sessions/{id}/chat` | Send a message; stream SSE response |
 | POST | `/api/copilot/sessions/{id}/messages/{mid}/snapshot` | Apply a suggestion — requires a `pre_snapshot` body (400 without it); `mid` is the `message_id` from `complete` |
-| GET / PUT | `/api/copilot/settings/model` | Get / set the Copilot model (default `gpt-5.2`) |
+| GET / PUT | `/api/copilot/settings/model` | Get / set the Copilot model (default `claude-opus-4-6`) |
 | DELETE | `/api/copilot/sessions/{id}` | Delete a session |
 
 Chat body: `{ "message", "workflow_state"?: { nodes, edges } }`. Chat SSE events:
@@ -161,7 +161,9 @@ truncated) with tools including `modify_workflow`, `get_block_info`, `get_db_sch
 `list_project_assets`, `get_asset_details`, `execute_public_sql` (read-only,
 **public schema only**), `get_workflow_run_logs`, `manage_project_asset`
 (UI-confirmed). Allowed models are function-calling-capable only (GPT-5.2/4.1,
-o3/o4, Claude Opus/Sonnet/Haiku 4.x; default `gpt-5.2`). It bills as an agent run.
+o3/o4, Claude Opus/Sonnet/Haiku 4.x, Gemini; default `claude-opus-4-6`). It bills
+as an agent run. `GET /api/copilot/settings/model` returns the authoritative
+selectable list and current default.
 
 ## 8. Gotchas
 

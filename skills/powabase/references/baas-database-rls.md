@@ -39,6 +39,34 @@ Useful `ai.*` tables: `agents`, `agent_sessions`, `agent_runs`, `agent_tools`,
 `workflow_block_logs`, `tools`, `project_settings`, `ai_provider_keys`. For the
 live list, `GET /rest/v1/` with `Accept-Profile: ai`.
 
+### Securing a user-owned `public` table (do this for every user-facing table)
+
+RLS is **off by default**, so a fresh `public` table is fully readable/writable by
+anyone with the Anon key until you enable it. The canonical user-scoped pattern —
+filter rows by the JWT's user id via `auth.uid()`:
+
+```sql
+create table public.documents (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users,
+  title text,
+  created_at timestamptz default now()
+);
+alter table public.documents enable row level security;
+
+-- one policy per action; WITH CHECK guards writes, USING guards reads/updates
+create policy "own_select" on public.documents for select to authenticated using (user_id = auth.uid());
+create policy "own_insert" on public.documents for insert to authenticated with check (user_id = auth.uid());
+create policy "own_modify" on public.documents for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "own_delete" on public.documents for delete to authenticated using (user_id = auth.uid());
+```
+
+Then end users hit `/rest/v1/documents` from the browser with the **Anon key + their
+user JWT** and only see their own rows. Roles: `anon` (no JWT) and `authenticated`
+(valid user JWT) are gated by policies; the **Service Role key bypasses RLS
+entirely** (server-side only). With RLS enabled and zero policies, a table is
+locked to everyone except the service role — a safe default while you write policies.
+
 ## 3. Querying `ai.*` via PostgREST
 
 Add the profile header or PostgREST looks in `public` and 404s/returns empty:

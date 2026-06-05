@@ -14,9 +14,8 @@ lines. The same buffering rules apply to all three.
 | `chunk` | `content` | Final assembled text (sync-style/no-tool generation) |
 | `tool_call` | `tool_name`, `arguments` | Agent is calling a tool |
 | `tool_result` | `tool_name`, `result` | Tool finished |
-| `reasoning_delta` | `delta` | Per-token reasoning (only if `reasoning_requested`; forwarded only) |
-| `reasoning` | `text` | Persisted reasoning segment |
-| `reasoning_summary` | `summary` | Final summarized reasoning at end of a step |
+| `reasoning_delta` | `delta` | Per-token reasoning (only when the agent has `reasoning_effort` set; forwarded only) |
+| `reasoning` | `text` | Persisted reasoning segment (there is **no** `reasoning_summary` event) |
 | `approval_requested` | `tool_name`, `tool_input` | Paused for approval (see agents reference) |
 | `context_handler_created` | `context_handler_id` | A retrieval ran mid-run (citation panel) |
 | `complete` | `run_id`, `content`, `usage` | Run finished |
@@ -36,20 +35,23 @@ currently working.
 
 ## 3. Workflow events (`/api/workflows/{id}/execute/stream`)
 
-| Event | Key fields | When |
-| --- | --- | --- |
-| `workflow_start` | `execution_id` | Execution began |
-| `block_started` | `block_id`, `block_type` | A block is about to run |
-| `block_chunk` | `block_id`, `delta` | A streaming block produced output |
-| `content_delta` / `reasoning_delta` | `block_id`, `delta` | Forwarded from an agent/orchestration block — render tokens live |
-| `block_output` | `block_id`, `output` | A block finished (downstream may reference it) |
-| `block_completed` | `block_id` | Block fully done |
-| `block_error` | `block_id`, `error` | A block failed (workflow short-circuits unless next block is an error handler) |
-| `workflow_complete` | `execution_id`, `result` | Whole execution finished |
-| `workflow_error` | `execution_id`, `error` | Top-level failure |
+> **Workflow events key on `type`, NOT `event`.** Agent/orchestration runs (§1–2)
+> discriminate on an `event` field; workflow runs use **`type`**. A parser that
+> switches on `event` (like the §5 agent example) sees nothing on a workflow stream.
+> Every block event also carries `block_id` and `block_type`.
 
-Block-level events drive a step indicator; the forwarded `content_delta` lets you
-stream an inner agent's tokens in the same UI.
+| `type` | Key fields | When |
+| --- | --- | --- |
+| `block_start` | `block_id`, `block_type` | A block is about to run |
+| `block_chunk` | `block_id`, `block_type`, `chunk` | A streaming (agent/LLM) block emitted a token — render live |
+| `block_complete` | `block_id`, `block_type`, `data`, `duration_ms` | Block finished; `data` is its output (downstream blocks reference it) |
+| `block_error` | `block_id`, `block_type`, `data`, `duration_ms` | Block failed (workflow short-circuits unless the next block is an error handler) |
+| `done` | `execution_id` | Whole execution finished |
+| `error` | `error`, `error_code?` | Top-level failure or timeout (`error_code` e.g. `execution_timeout`) |
+
+Block events drive a step indicator; `block_chunk` lets you stream an inner agent's
+tokens in the same UI. Note there is **no** `workflow_start`/`workflow_complete`
+event — the first `block_start` and the final `done` bracket the run.
 
 ## 4. Keepalive & buffering (don't skip this)
 
