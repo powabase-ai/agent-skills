@@ -40,9 +40,13 @@ back is a no-op. `DELETE /api/settings/{key}` reverts to default;
 `POST /api/settings/reset-category` resets a whole category (`tools`, `agents`,
 `copilot`, `knowledge-indexing`, `knowledge-retrieval`, `compaction`, `sources`).
 Notable keys: `EXA_API_KEY`, `FIRECRAWL_API_KEY`, `VISION_MODEL` (default
-`gpt-4.1-mini`), `AGENT_DEFAULT_MODEL`, `KB_DEFAULT_TOP_K`, `RERANKER_DEFAULT_MODEL`,
-`copilot_model` (default `gpt-5.2`). (`code_execute`'s sandbox is a platform-level
-env var, not a project setting — operator territory.)
+`gpt-4.1-mini`), `AGENT_DEFAULT_MODEL` (default `gpt-5.2`), `KB_DEFAULT_TOP_K`,
+`RERANKER_DEFAULT_MODEL`, `copilot_model` (default `claude-opus-4-6`).
+(`code_execute`'s sandbox is a platform-level env var, not a project setting —
+operator territory.) These are a curated subset — `GET /api/settings` returns the
+**full** registry (90+ keys across `agents`/`tools`/`knowledge-indexing`/
+`knowledge-retrieval`/`copilot`/`compaction`/`sources`) with each key's current
+value and default; treat it as authoritative rather than hardcoding.
 
 ## 4. How to phrase the ask
 

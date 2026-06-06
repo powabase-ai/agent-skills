@@ -12,7 +12,7 @@ over SSE. All paths under `{BASE_URL}` with two-header auth.
 | GET / **PATCH** / DELETE | `/api/agents/{id}` | Get / update / delete |
 | POST / GET | `/api/agents/{id}/tools` | Assign / list tool assignments |
 | **PATCH** / DELETE | `/api/agents/{id}/tools/{assignment_id}` | Update `config_override` / remove |
-| POST / GET | `/api/agents/{id}/knowledge-bases` | Link / list KBs (link auto-adds a `knowledge_search` tool; multiple KBs share one tool with a `knowledge_base_names` filter) |
+| POST / GET | `/api/agents/{id}/knowledge-bases` | Link / list KBs (link auto-adds a `knowledge_search` tool; multiple KBs share one tool with a `knowledge_base_names` filter). Body `{ knowledge_base_id, config? }` — `config` can override this agent's `top_k` / `retrieval_method` for that KB without touching the KB's stored `retrieval_config` |
 | DELETE | `/api/agents/{id}/knowledge-bases/{assignment_id}` | Unlink a KB |
 | POST / GET | `/api/agents/{id}/mcp-servers` | Add / list MCP servers |
 | **PUT** / DELETE | `/api/agents/{id}/mcp-servers/{server_id}` | Update / remove an MCP server |
@@ -41,15 +41,23 @@ Create/update body honors **only** `name` (required on create), `model`,
 > **Top-level `temperature` (and other tuning fields) are silently dropped.** Nest
 > all model tuning inside `settings`. No error is returned — you just get defaults.
 
+**Reasoning / extended thinking** is driven by `settings.reasoning_effort`
+(`"low"`/`"medium"`/`"high"`) on a reasoning-capable model — set it at create/update
+time. There is **no** per-run `reasoning_requested` input; the run only *reports*
+whether reasoning happened (a `reasoning_requested` field in the `start` SSE event
+and run record). When set, the run emits `reasoning_delta` (per-token, forwarded)
+and `reasoning` (persisted) events and stores `reasoning_steps` in the run record.
+
 No model allow-list is documented (examples use `gpt-4o`); check
 `AGENT_DEFAULT_MODEL` / live docs.
 
 **Per-run body** (`/run` and `/run/stream`): `message` (required); `session_id`
 (omit to start fresh); `temperature` (per-run override); `response_format`
-(JSON-schema for structured output); `reasoning_requested` (bool); `max_context_tokens`;
-`citations_enabled`. **Context sources are mutually exclusive** — provide at most
-**one** of `knowledge_bases` / `context_handler_id` / `context_override` /
-`context_items`, or you get 400.
+(JSON-schema for structured output); `max_context_tokens`; `citations_enabled`.
+(There is **no** per-run `reasoning_requested` — reasoning is the agent's
+`settings.reasoning_effort`, above.) **Context sources are mutually exclusive** —
+provide at most **one** of `knowledge_bases` / `context_handler_id` /
+`context_override` / `context_items`, or you get 400.
 
 ## 3. The ReAct loop & limits
 
@@ -203,6 +211,12 @@ The exact `status` enum isn't documented — read it from a real run. The `error
 field and the first failure-shaped entry in `events` are the highest-signal places
 to start; the full playbook (and the error→cause table) is in
 [billing-limits-and-debugging.md](billing-limits-and-debugging.md).
+
+**Citations.** Set `citations_enabled: true` on the run (§2) to have the model
+inline citation markers; the platform maps them to the retrieved chunks and the
+final response / run record carries a `citations` array alongside `retrieved_context`
+(the source chunks + metadata). Citations arrive in the **`complete`** event, not a
+separate SSE event — render them from the final payload or the run record.
 
 ## 10. Context handlers (RAG without an agent)
 

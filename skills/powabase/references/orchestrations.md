@@ -72,6 +72,12 @@ plus the child run ID / usage), `sequential_step` (sequential), entity
 ## 5. Gotchas
 
 - **Run with zero entities → 400.** Add at least one entity first.
+- **Hooks (incl. approval) do NOT fire at the coordinator level.** The
+  `/api/orchestrations/{id}/hooks` endpoints store hooks, but the orchestration
+  engine doesn't execute them yet — there is no orchestration-level approval gate or
+  `approval_requested` event. To gate tool calls in a supervised run, put the
+  approval hook on the **member agent** (§7 of [agents-and-tools.md](agents-and-tools.md));
+  the coordinator respects that agent's pause when it delegates.
 - **Sequential & parallel fail-fast** — one entity error fails the whole run.
 - **Orchestrations update with `PUT`; workflows update with `PATCH`** — easy to mix.
 - **Supervisor quality hinges on role descriptions** — vague/overlapping roles make
