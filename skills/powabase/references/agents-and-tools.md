@@ -48,8 +48,14 @@ whether reasoning happened (a `reasoning_requested` field in the `start` SSE eve
 and run record). When set, the run emits `reasoning_delta` (per-token, forwarded)
 and `reasoning` (persisted) events and stores `reasoning_steps` in the run record.
 
-No model allow-list is documented (examples use `gpt-4o`); check
-`AGENT_DEFAULT_MODEL` / live docs.
+**`model` is a LiteLLM model ID**, passed through unchanged and **not** restricted to
+the Studio picker: bare for OpenAI/Anthropic (`gpt-4o`, `claude-sonnet-4-6`), prefixed
+otherwise — `gemini/<model>`, `openrouter/<org>/<model>` (e.g.
+`openrouter/deepseek/deepseek-chat`; OpenRouter slugs must match LiteLLM's `openrouter/`
+cost-map keys, which can differ from OpenRouter's own). Tool-using agents need a
+function-calling-capable model. The provider needs a BYOK key (or to be AI-on-us) or the
+run fails `provider_key_decrypt_failed`. Format + walkthrough:
+[docs.powabase.ai/guides/byollm](https://docs.powabase.ai/guides/byollm).
 
 **Per-run body** (`/run` and `/run/stream`): `message` (required); `session_id`
 (omit to start fresh); `temperature` (per-run override); `response_format`
@@ -194,12 +200,32 @@ POST /api/agents/{id}/hooks
   "config": { "message": "Approve this write?" } }
 ```
 
+> Approval (like all hooks) fires only on **standalone** agent runs — **not** when this
+> agent runs inside an orchestration. Don't rely on it as an orchestration gate; see
+> [orchestrations.md](orchestrations.md) §5.
+
 ## 8. Hooks (lifecycle)
 
-Events: `OnRunStart`, `PreToolUse`, `PostToolUse`, `PreResponse`, `OnRunComplete`.
-Types: `http` (POST event data to a URL; can allow/deny/modify; fail-open),
-`rule` (match `CONTAINS`/`STARTS_WITH`/`MATCHES`/`IN` against tool args),
-`approval` (see §7). Required on create: `event`, `type`, `config`.
+Events: `OnRunStart`, `PreToolUse`, `OnDelegation` (before a delegate-tool call),
+`PostToolUse`, `PreResponse`, `OnRunComplete`. Types: `http`, `rule`, `approval`
+(§7). Required on create: `event`, `type`, `config`; optional `matcher` (tool name),
+`enabled` (default `true`), `position` (run order, default `0`). **`event`/`type` are
+stored verbatim and not validated** — an unknown value is saved but never fires, so a
+typo fails silently. No update endpoint; delete and re-create to change one.
+
+`http` contract: Powabase POSTs `{ event, tool_name, data, output? }` to `config.url`
+(with `config.headers`; `config.timeout_seconds` default 5; URL is SSRF-checked).
+Return `200` + `{ "action": "allow"|"deny", "message"?, "modified_input"?, "modified_output"? }`
+— `modified_input` replaces tool args (`PreToolUse`); `modified_output` replaces the
+tool result (`PostToolUse`) or final content (`PreResponse`). Any non-200/timeout =
+**fail-open** (allow). `rule`: match `CONTAINS`/`STARTS_WITH`/`MATCHES`/`IN` against
+tool args; first deny wins.
+
+> **Hooks fire at lifecycle boundaries, not per token — they cannot transform the SSE
+> stream.** `PreResponse` runs *after* the loop on the assembled content, by which point
+> a streaming client has already received every `chunk`. To rewrite streamed tokens
+> (e.g. inline markers → rich content), do it in your own proxy/app, not a hook. Hooks
+> also don't fire inside orchestrations ([orchestrations.md](orchestrations.md) §5).
 
 ## 9. Run records & failed-run debugging
 
