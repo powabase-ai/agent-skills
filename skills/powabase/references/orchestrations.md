@@ -69,6 +69,33 @@ plus the child run ID / usage), `sequential_step` (sequential), entity
 (`content`, `usage`, `steps`), `error`. Parser details:
 [streaming-sse.md](streaming-sse.md).
 
+## Designing an orchestration — be exhaustive (MECE)
+
+Each member is a full agent, so design **every** one on the four agent pillars (data /
+prompt / tools / model + reasoning effort — see
+[agents-and-tools.md](agents-and-tools.md) §0), then add the team-level axes:
+
+- **Decompose MECE.** Split the job into roles that are **mutually exclusive** (no two
+  members own the same sub-task) and **collectively exhaustive** (every sub-task has an
+  owner). Gaps make the coordinator improvise; overlap makes it misroute or duplicate work.
+- **Role descriptions are the routing contract.** For `supervisor`, the coordinator's
+  prompt is built from each entity's `role_description` — make them **specific and
+  non-overlapping** (§3). Add explicit routing rules in
+  `orchestrator_config.additional_instructions`.
+- **Data per member.** Link each member only to the KBs its role needs — don't share a KB
+  across members that don't use it; a member with no relevant KB shouldn't have one.
+- **Tools per member.** Give each member exactly the tools (builtin / custom / MCP) its
+  role requires and lock them with `config_override`. The coordinator itself only holds
+  its `delegate_to_*` tools.
+- **Model + reasoning per member.** Set each member's `model` and
+  `settings.reasoning_effort` to its sub-task — a cheap, fast model for routing/formatting,
+  a stronger reasoning model for the hard analytical member. **Don't leave any on defaults.**
+- **Match the strategy to the shape:** `supervisor` for dynamic routing, `sequential` for
+  a fixed pipeline (mind fail-fast), `parallel` for independent perspectives merged at the end.
+
+> Hooks / approval do **not** fire inside an orchestration (§5) — bake guardrails into each
+> member's prompt and tool `config_override` instead.
+
 ## 5. Gotchas
 
 - **Run with zero entities → 400.** Add at least one entity first.
