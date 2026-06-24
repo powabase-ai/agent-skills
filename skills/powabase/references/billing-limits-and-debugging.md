@@ -45,6 +45,21 @@ rerank) always are. Charges carry internal idempotency
 keys, so a retried request with the same key won't double-bill (but the API doesn't
 honor your `Idempotency-Key` header — see [api-conventions.md](api-conventions.md)).
 
+**Web search tiers cost differently.** `web_search` bills by `search_type`: the
+standard modes (`auto` / `neural` / `keyword`) at the base `web_search` rate, but Exa's
+agentic **`deep`** and **`deep-reasoning`** modes bill pricier dedicated actions:
+
+| `search_type` | Billing action | Base cost / call |
+| --- | --- | --- |
+| `auto` / `neural` / `keyword` | `web_search` | $0.04 |
+| `deep` | `web_search_deep` | $0.075 |
+| `deep-reasoning` | `web_search_deep_reasoning` | $0.10 |
+
+Base cost is **before** the plan per-call multiplier (Free 100% · Self-serve 75% ·
+Scale 50%). A timeout or 5xx from Exa is **not** billed (platform-error path), though the
+balance check still gates dispatch. Pin the tier with the tool's `config_override` and
+billing follows the forced type — see [agents-and-tools.md](agents-and-tools.md) §4–5.
+
 **`402 insufficient_credits`** — **do not retry.** Surface the renewal date.
 
 ```json

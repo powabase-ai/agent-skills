@@ -177,6 +177,13 @@ Details: [rag-context-engineering.md](references/rag-context-engineering.md),
   Known steps, dynamic content; webhook/cron triggers. →
   [workflows-and-copilot.md](references/workflows-and-copilot.md)
 
+> **Specify any agent/orchestration exhaustively (MECE).** Cover all four pillars —
+> **data** (link the right KBs), **prompt** (detailed, explicit, Markdown bulleted
+> instructions), **tools** (builtin / custom / MCP, only what's needed), and **model +
+> `reasoning_effort`** (choose deliberately — **defaults often underperform**). No gaps,
+> no overlap. Full checklists: [agents-and-tools.md](references/agents-and-tools.md) §0 ·
+> [orchestrations.md](references/orchestrations.md).
+
 **Typed `/api/*` vs PostgREST vs direct Postgres?** Use **`/api/*`** for anything
 the platform manages (runs, indexing, workflow execution — it coordinates async
 work and ownership). Use **PostgREST** (`/rest/v1/*`) for your own `public` tables

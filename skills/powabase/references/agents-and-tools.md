@@ -4,6 +4,50 @@ An **agent** = an LLM + system prompt + settings + tools + optional knowledge
 bases + session memory, run in a **ReAct** (reason → act → observe) loop. Streamed
 over SSE. All paths under `{BASE_URL}` with two-header auth.
 
+## 0. Designing an agent — cover all four pillars (be exhaustive, MECE)
+
+A good agent is **deliberately specified on four axes**. Skipping any one is the
+usual cause of mediocre results — **defaults are rarely right**. Be **MECE**: every
+instruction, tool, and data source has a clear purpose, with **no gaps and no
+overlap**.
+
+1. **Data — knowledge bases** (link-KB endpoint in §1). Decide *exactly* which KBs the
+   agent needs and link **all** of them (multiple KBs share one `knowledge_search`
+   tool, filtered by `knowledge_base_names`). Per-link `config` can override `top_k` /
+   `retrieval_method` for this agent without touching the KB. No KB needed? Say so and
+   rely on tools/prompt — don't link an irrelevant KB "just in case" (it adds noise and
+   cost). Match the KB's indexing/retrieval to the query shape (decision table in
+   SKILL.md / [rag-context-engineering.md](rag-context-engineering.md)).
+2. **Prompt — `system_prompt`, detailed and explicit.** The highest-leverage field.
+   Write it in **Markdown with bulleted instruction lists**, not a vague sentence.
+   Cover, MECE:
+   - **Role & scope** — who the agent is; what it must and must **not** do.
+   - **Inputs & context** — what it receives; how to use the KB / retrieved chunks.
+   - **Tool-use policy** — when to call each tool, when *not* to, how to combine them
+     (e.g. "call `web_search` only after the KB returns nothing relevant").
+   - **Output contract** — exact format, length, tone, citation rules; pair with
+     `response_format` (§2) for structured output.
+   - **Constraints & edge cases** — refusals, missing-data handling, ambiguity, safety.
+   - **Insights & examples** — short worked examples or domain facts that steer quality.
+
+   Favor explicit and comprehensive over terse — ambiguity is where models go wrong.
+3. **Tools — internal and external, assigned on purpose** (§4). Three kinds: **builtin**
+   (eight, assign by name), **custom** (your own HTTP endpoint, SSRF-validated), and
+   **MCP servers** (runtime tool discovery from an external provider). Give the agent
+   *every* tool the task needs and *nothing* it doesn't. Lock parameters with
+   `config_override` (§5) — e.g. pin `web_search` to `deep` + specific domains, or
+   restrict `database_query` to named tables. Tool use requires **`/run/stream`**.
+4. **Model + reasoning effort — choose, don't default.** `model` is any LiteLLM ID
+   (§2); pick one matched to the task and **function-calling-capable** if it uses tools.
+   On a reasoning-capable model, **set `settings.reasoning_effort`** (`low`/`medium`/
+   `high`) explicitly — leaving it unset (or picking a weak model) is a common cause of
+   bad output on hard tasks. Set `settings.temperature` deliberately too (low for
+   precision/extraction, higher for ideation). The provider needs a BYOK key or AI-on-us.
+
+> The same discipline applies to **orchestrations** — additionally make each member's
+> `role_description` specific and non-overlapping (MECE across the team). See
+> [orchestrations.md](orchestrations.md).
+
 ## 1. Endpoints
 
 | Method | Path | Purpose |
@@ -103,13 +147,42 @@ POST /api/agents/{id}/tools   { "tool_name": "database_query" }
 | `http_request` | External HTTP, 10k-char cap, 30 s. **No SSRF protection** — can reach `localhost`/RFC1918/`169.254.169.254`. |
 | `code_execute` | Python/JS in a sandbox. Needs platform `CODE_SANDBOX_URL` (+ optional `CODE_SANDBOX_API_KEY`); else returns *"Code sandbox is not configured"*. |
 | `storage_read` / `storage_write` | Project Storage list/download / upload UTF-8 text. `storage_read` returns a **signed URL** for binary files (inline content only for text). |
-| `web_search` | Exa.ai (1–10 results, ~20–50k chars). **Needs `EXA_API_KEY`** (Settings → Tools). |
+| `web_search` | Exa.ai (1–10 results, ~20–50k chars). Five `search_type` modes incl. agentic **`deep`** / **`deep-reasoning`** (slower, pricier — see callout). **Needs `EXA_API_KEY`** (Settings → Tools). |
 | `web_scrape` | Firecrawl → markdown (≤200k chars — exempt from the 50k cap). **Needs `FIRECRAWL_API_KEY`**; `include_images` uses `gpt-4.1-mini` vision; direct image URLs bypass Firecrawl. |
 
 > **Security:** `database_query`/`database_write` ignore the caller's identity and
 > run as superuser — never expose `/run*` to end-user JWTs (see §8). Prefer a
 > **custom tool** over builtin `http_request` for fixed endpoints (custom tools
 > enforce SSRF validation).
+
+#### `web_search` search modes (`search_type`) — pick deliberately; cost varies ~2.5×
+
+Exa supports five modes; the default `auto` lets the engine choose neural vs keyword.
+Set the mode per call, or **pin it via `config_override`** (§5).
+
+| `search_type` | What it does | Base cost / call | When to use |
+| --- | --- | --- | --- |
+| `auto` *(default)* | Engine picks neural or keyword | $0.04 | Most queries |
+| `neural` | Semantic / meaning-based | $0.04 | Conceptual, fuzzy intent |
+| `keyword` | Exact-term matching | $0.04 | IDs, error codes, exact phrases |
+| `deep` | Exa **agentic** deep search | $0.075 | Hard research questions; quality > latency |
+| `deep-reasoning` | Agentic deep search **+ reasoning** | $0.10 | Hardest multi-hop questions; top quality |
+
+- **Base cost is before the plan multiplier** (Free 100% · Self-serve 75% · Scale 50%);
+  billing detail in [billing-limits-and-debugging.md](billing-limits-and-debugging.md) §2.
+- `deep` / `deep-reasoning` are **much slower** and the priciest tiers —
+  `deep-reasoning` is the most timeout-prone (30 s handler cap). **Reserve them for
+  questions a standard search can't answer; don't make them an agent's default.** A
+  timeout / 5xx is **not** billed (platform-error path), but a positive balance is still
+  required to dispatch.
+- Other params (all optional): `num_results` (1–10, default 5), `include_domains` /
+  `exclude_domains`, `start_date` / `end_date` (ISO 8601, published-date filter),
+  `category` (`company` / `news` / `research paper` / `tweet` / `github` / `wikipedia` /
+  `personal site`), `content_mode` (`highlights` default · `compact_text` · `full_text`).
+- **Pin a tier with `config_override`** to force it regardless of what the model picks —
+  e.g. `{"config_override": {"search_type": "deep", "num_results": 3}}`. **Billing
+  follows the forced type**, so pinning `deep` / `deep-reasoning` bills the deep tier on
+  every call.
 
 ### Custom (your own HTTP endpoint)
 
