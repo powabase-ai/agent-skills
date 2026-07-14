@@ -44,10 +44,24 @@ The per-ecosystem manifests in this repo that make the above "just work":
 
 A coding assistant can't submit these forms; they're one-time human steps.
 
-1. **Anthropic `claude-community` marketplace** — the official submit-to-list channel
-   for Claude. Validate locally (`claude plugin validate`), then submit at
-   **claude.ai/settings/plugins/submit** (or platform.claude.com/plugins/submit). The
-   skill is already wrapped as a plugin via `.claude-plugin/marketplace.json`.
+1. **Anthropic `claude-community` marketplace** — the public community marketplace where
+   third-party submissions land after review (distinct from `claude-plugins-official`, the
+   Anthropic-curated marketplace, which has no application process). Users add ours with
+   `/plugin marketplace add anthropics/claude-plugins-community` and install it as
+   `@claude-community` once it's live. To submit:
+   - **Validate locally first:** `claude plugin validate .` (add `--strict` to catch metadata
+     warnings). The review pipeline runs the same check plus automated safety screening. The
+     plugin is wrapped via `.claude-plugin/marketplace.json` and `.claude-plugin/plugin.json`.
+   - **Submit via the in-app form** (a coding assistant can't fill these; a maintainer must):
+     - **claude.ai:** `claude.ai/admin-settings/directory/submissions/plugins/new` — requires a
+       **Team or Enterprise** org with directory-management access (org Owners have it by default).
+     - **Console:** `platform.claude.com/plugins/submit` — the path for individual authors who
+       aren't part of a Team/Enterprise org.
+   - **After approval:** the plugin is pinned to a specific commit SHA in the
+     `anthropics/claude-plugins-community` catalog, and CI bumps that pin automatically as you
+     push new commits. The public catalog syncs **nightly**, so expect a delay between approval
+     and the plugin appearing in `marketplace.json` — check by searching for its name in the
+     community catalog to confirm it's installable.
 2. **cursor.directory** — submit the repo at **cursor.directory/plugins/new** (sign in
    with GitHub, paste the repo URL). It auto-detects `skills/*/SKILL.md` via the "Open
    Plugins" standard; no PR needed.
