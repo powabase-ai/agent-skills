@@ -2,7 +2,7 @@
   "name": "powabase-agent-skills",
   "owner": {
     "name": "Powabase",
-    "email": "support@powabase.ai"
+    "email": "hello@powabase.ai"
   },
   "metadata": {
     "description": "Official Powabase agent skills for Claude Code",

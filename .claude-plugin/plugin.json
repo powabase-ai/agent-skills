@@ -6,7 +6,7 @@
   "description": "Build on Powabase — the AI Backend-as-a-Service (RAG, agents, orchestration, workflows) plus a Supabase-style BaaS layer. Bundles the `powabase` agent skill under skills/.",
   "author": {
     "name": "Powabase",
-    "email": "support@powabase.ai",
+    "email": "hello@powabase.ai",
     "url": "https://powabase.ai"
   },
   "homepage": "https://docs.powabase.ai",
