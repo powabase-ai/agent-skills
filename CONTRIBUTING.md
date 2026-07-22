@@ -49,4 +49,4 @@ tags a version, packages each `skills/*` directory into a `.tar.gz`, and publish
 ## License
 
 By contributing, you agree your contributions are licensed under the
-[MIT License](LICENSE).
+[Apache License 2.0](LICENSE).
