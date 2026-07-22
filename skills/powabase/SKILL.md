@@ -1,7 +1,7 @@
 ---
 name: powabase
 description: "Use for ANY task building on Powabase, the multi-tenant AI Backend-as-a-Service (projects on *.p.powabase.ai, the /api/* surface). Triggers: RAG & knowledge bases (Sources, document upload/extraction, indexing strategies chunk_embed/full_document/page_index/graph_index/doc2json, retrieval vector/full-text/hybrid/tree search, reranking, query enrichment, multimodal/image retrieval, embeddings, pgvector); agents (ReAct loops, builtin/custom/MCP tools, sessions, streaming, approval/human-in-the-loop); multi-agent orchestrations (supervisor/sequential/parallel); workflows (block graphs, webhooks, scheduled/cron triggers, Copilot); SSE streaming of agent/orchestration/workflow runs; and the Powabase BaaS layer — PostgREST, Row Level Security, the ai.* schema, GoTrue auth, Storage, Realtime, direct Postgres. Also connecting/authenticating, choosing the right API key, and handling billing/rate-limit/error responses."
-license: MIT
+license: Apache-2.0
 metadata:
   author: powabase
   version: "1.0.0" # x-release-please-version

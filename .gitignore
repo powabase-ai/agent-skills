@@ -5,3 +5,6 @@ dist/
 *.tar.gz
 .DS_Store
 *.log
+
+# git worktrees
+.worktrees/

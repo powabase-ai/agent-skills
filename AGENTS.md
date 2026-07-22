@@ -41,7 +41,7 @@ A skill is **YAML frontmatter** followed by **Markdown instructions**, per the
 ---
 name: powabase
 description: What this skill does AND when to use it (this is the trigger).
-license: MIT
+license: Apache-2.0
 metadata:
   author: powabase
   version: "0.0.0" # x-release-please-version

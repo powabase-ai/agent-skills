@@ -95,4 +95,4 @@ and driven by [Release Please](https://github.com/googleapis/release-please).
 
 ## License
 
-[MIT](LICENSE)
+[Apache 2.0](LICENSE)

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "packageManager": "pnpm@10.24.0",
   "author": "Powabase",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "Official Powabase agent skills",
   "type": "module",
   "scripts": {
