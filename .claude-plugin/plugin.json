@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "powabase",
   "displayName": "Powabase",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Build on Powabase — the AI Backend-as-a-Service (RAG, agents, orchestration, workflows) plus a Supabase-style BaaS layer. Bundles the `powabase` agent skill under skills/.",
   "author": {
     "name": "Powabase",

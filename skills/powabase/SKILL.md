@@ -4,7 +4,7 @@ description: "Use for ANY task building on Powabase, the multi-tenant AI Backend
 license: Apache-2.0
 metadata:
   author: powabase
-  version: "1.0.0" # x-release-please-version
+  version: "1.1.0" # x-release-please-version
   date: June 2026
 ---
 
