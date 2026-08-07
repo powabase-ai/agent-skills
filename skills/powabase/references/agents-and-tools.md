@@ -14,7 +14,9 @@ overlap**.
 1. **Data — knowledge bases** (link-KB endpoint in §1). Decide *exactly* which KBs the
    agent needs and link **all** of them (multiple KBs share one `knowledge_search`
    tool, filtered by `knowledge_base_names`). Per-link `config` can override `top_k` /
-   `retrieval_method` for this agent without touching the KB. No KB needed? Say so and
+   `retrieval_method` for this agent without touching the KB. A KB needed for only
+   one query? Don't attach — pass `runtime_knowledge_bases` on that run's `/run/stream` request (§2,
+   "Runtime KB references"). No KB needed? Say so and
    rely on tools/prompt — don't link an irrelevant KB "just in case" (it adds noise and
    cost). Match the KB's indexing/retrieval to the query shape (decision table in
    SKILL.md / [rag-context-engineering.md](rag-context-engineering.md)).
@@ -108,6 +110,29 @@ run fails `provider_key_decrypt_failed`. Format + walkthrough:
 `settings.reasoning_effort`, above.) **Context sources are mutually exclusive** —
 provide at most **one** of `knowledge_bases` / `context_handler_id` /
 `context_override` / `context_items`, or you get 400.
+
+**Runtime KB references** (`/run/stream` only, since powabase-ai 0.4): to give the
+agent a KB **for one query without attaching it**, pass
+`runtime_knowledge_bases: [{ id, top_k?, retrieval_method?, similarity_threshold?,
+filter_metadata?, source_ids?, max_context_tokens? }]`. This adds the named KBs to
+the run's real `knowledge_search` tool — agentic search, the model decides
+when/what/how often to search — unlike the preload `knowledge_bases` field, which
+does ONE up-front retrieval keyed on the user message (optionally
+query-enriched) and injects it (no tool). Semantics:
+strictly per-request (re-send on follow-ups); merges with attached KBs into the one
+`knowledge_search` tool, and an entry naming an attached KB **overrides** that
+attachment's config for the run; validated before the stream opens (existence,
+knob types/ranges, unknown-key typos and duplicate ids rejected, `source_ids` must be indexed in that
+entry's KB) with a **10-entry cap**; NOT part of the four-way mutual-exclusivity
+rule — combines with any context source (with preload `knowledge_bases`, the preload
+retrieval runs up front plus each `knowledge_search` call the model makes —
+both billed, no dedup). the **per-entry** `max_context_tokens` is honored only when the
+run's tool resolves to exactly one KB (the top-level per-run field of the
+same name is separate and always honored). On non-streaming `/run` the field 400s (no
+tool loop). Also accepted on `POST /api/orchestrations/{id}/run/stream`, where it
+flows to **every** sub-agent's tool. Authorization is project-wide, not per-agent:
+any caller who can run the agent can reference any project KB this way —
+run from trusted backends.
 
 ## 3. The ReAct loop & limits
 

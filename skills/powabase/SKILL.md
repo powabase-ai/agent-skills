@@ -130,7 +130,9 @@ The reference end-to-end pattern. Each step links to depth.
    until the indexed source is `indexed`.
 3. **Create agent** `POST /api/agents` `{name, model, system_prompt, settings}` →
    **link KB** `POST /api/agents/{id}/knowledge-bases` `{knowledge_base_id}` (the
-   agent auto-gets a `knowledge_search` tool).
+   agent auto-gets a `knowledge_search` tool). KB needed for **one query only**?
+   Skip the link — pass `runtime_knowledge_bases` on `/run/stream` instead
+   (request-scoped, agent-driven search; see [agents-and-tools.md](references/agents-and-tools.md) §2).
 4. **Chat (streaming)** `POST /api/agents/{id}/run/stream` `{message}` — consume
    SSE; capture `session_id` from the `start` event for multi-turn.
 
