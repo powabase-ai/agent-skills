@@ -1,8 +1,13 @@
 # Powabase Agent Skills
 
-Agent Skills that help developers using AI coding assistants build on
-[Powabase](https://powabase.ai) — the multi-tenant **AI Backend-as-a-Service**.
-Agent Skills are folders of instructions and resources that an agent discovers
+**The AI-Native Supabase Alternative — RAG and Agents built-in**
+
+Powabase is the Postgres backend for AI apps. Every project gets its own database, auth, storage, and dedicated compute, with documents that index on upload and agents that call tools over HTTP or MCP — all behind one REST API.
+
+[Website](https://powabase.ai) · [Docs](https://docs.powabase.ai) · [MCP server](https://mcp.powabase.ai/mcp) · [Compare with Supabase](https://powabase.ai/supabase-alternative/)
+
+This repo holds Agent Skills that help developers using AI coding assistants build on
+[Powabase](https://powabase.ai). Agent Skills are folders of instructions and resources that an agent discovers
 and loads on demand to work more accurately and efficiently. Compatible with
 Claude Code and any agent that supports the
 [Agent Skills](https://agentskills.io/) open standard.
