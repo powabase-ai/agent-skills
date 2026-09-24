@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Official Powabase agent skills for Claude Code",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "plugins": [
     {
@@ -14,7 +14,9 @@
       "description": "Use when building on Powabase (the AI Backend-as-a-Service). Triggers: knowledge bases, RAG, document indexing/retrieval; agents, tools, ReAct, sessions; multi-agent orchestration; workflows, blocks, webhooks, copilot; the /api/* agentic surface; and the Powabase BaaS layer (PostgREST, GoTrue auth, Storage, Realtime, direct Postgres) on *.p.powabase.ai projects.",
       "source": "./",
       "strict": false,
-      "skills": ["./skills/powabase"]
+      "skills": [
+        "./skills/powabase"
+      ]
     }
   ]
 }
