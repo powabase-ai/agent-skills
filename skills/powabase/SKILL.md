@@ -234,10 +234,20 @@ exactly where to go** (full table in [studio-setup-and-human-handoff.md](referen
 
 ## Powabase MCP server
 
-<!-- PLACEHOLDER — Powabase ships no MCP server yet (unlike Supabase); fill in URL / .mcp.json / auth / tool list when it launches. -->
-**Coming soon — none exists today.** There is no first-party Powabase MCP server or
-CLI. Build requests over raw HTTP (principle #1) and verify shapes against the live
-docs. Don't assume tools named `powabase_*` exist.
+Hosted at **`https://mcp.powabase.ai/mcp`** (streamable HTTP, OAuth sign-in with the
+user's Powabase account). Claude Code:
+`claude mcp add --transport http powabase https://mcp.powabase.ai/mcp`.
+Append `?read_only=true` to expose only read-only tools. ~60 tools, most taking a
+`project_ref`: list / inspect / pause / resume projects (**no create or delete**),
+SQL + schema inspection, auth users, storage, knowledge bases + sources, agents,
+orchestrations, workflows, and docs search. Details in
+[studio-setup-and-human-handoff.md](references/studio-setup-and-human-handoff.md) §5.
+
+- **MCP** (only if it's connected in this session): interactive work from the
+  assistant — exploring a project, inspecting tables, one-off SQL, trying an agent
+  or KB search, searching the docs.
+- **REST API** (principle #1): anything your app does at runtime, and anything MCP
+  doesn't cover.
 
 > Separately, an agent can connect to *external* MCP servers as runtime tools — a
 > real Powabase feature ([agents-and-tools.md](references/agents-and-tools.md)), unrelated to a Powabase MCP server for your assistant.

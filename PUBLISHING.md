@@ -1,8 +1,7 @@
 # Publishing & distribution
 
 How this skill reaches users across the AI ecosystems, what's automatic vs. a
-manual submission, and the roadmap for the channels that need the (forthcoming)
-Powabase MCP server.
+manual submission, and the roadmap for the channels that need the Powabase MCP server.
 
 > **The key fact:** a "skill" (`SKILL.md`) is a **cross-vendor open standard**
 > ([agentskills.io](https://agentskills.io)), read natively by Claude Code, GitHub
@@ -15,7 +14,7 @@ There are two categories of marketplace, and they take different artifacts:
 | Category | Examples | Artifact they accept | Our status |
 | --- | --- | --- | --- |
 | **Coding-agent skills** | Claude Code, Copilot, Cursor, Codex, Gemini CLI, Windsurf, Cline | a `SKILL.md` skill (this repo) | ✅ **Track A — shippable now** |
-| **Consumer / chat-agent** | ChatGPT Apps directory, Gemini Enterprise, GPT Store, Google Cloud Marketplace | an **MCP server**, custom GPT, or A2A agent — **not** a markdown skill | 🔜 **Track B — needs the Powabase MCP server** |
+| **Consumer / chat-agent** | ChatGPT Apps directory, Gemini Enterprise, GPT Store, Google Cloud Marketplace | an **MCP server**, custom GPT, or A2A agent — **not** a markdown skill | 🔜 **Track B — via the Powabase MCP server** |
 
 ---
 
@@ -81,12 +80,12 @@ A coding assistant can't submit these forms; they're one-time human steps.
 
 ---
 
-## Track B — consumer / chat-agent marketplaces (roadmap; needs the MCP server)
+## Track B — consumer / chat-agent marketplaces (roadmap; via the MCP server)
 
 These marketplaces do **not** accept a markdown skill. The cross-vendor primitive
 they consume is an **MCP server** — and Anthropic, OpenAI, and Google all consume
-MCP. Powabase's MCP server is the "coming soon" placeholder noted in the skill; once
-it ships, one server unlocks most of these at once:
+MCP. Powabase's MCP server is live at `https://mcp.powabase.ai/mcp`, and one server
+unlocks most of these at once:
 
 1. **Publish the MCP server to the official MCP Registry**
    (`registry.modelcontextprotocol.io`) with the `mcp-publisher` CLI — namespace

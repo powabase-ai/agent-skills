@@ -33,7 +33,7 @@ skill at `skills/powabase/SKILL.md`.
 
 See [PUBLISHING.md](PUBLISHING.md) for where this is listed, how to submit it to
 each marketplace, and the roadmap for the consumer marketplaces (ChatGPT Apps,
-Gemini Enterprise) that run through the forthcoming Powabase MCP server.
+Gemini Enterprise) that run through the Powabase MCP server (`https://mcp.powabase.ai/mcp`).
 
 ## Available skills
 
