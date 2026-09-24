@@ -132,6 +132,7 @@ Powabase ships **no first-party SDKs or CLI** today — raw HTTP is the supporte
 path. `@supabase/supabase-js` mostly works for the **BaaS** surface (PostgREST,
 Auth, Storage, Realtime) if you point it at `https://{ref}.p.powabase.ai` with the
 Anon key, with caveats: the agentic `/api/*` surface is **not** in it, and
-`supabase.graphql()` 404s (call `POST /rest/v1/rpc/graphql` instead). The `/api/*`
+there's no `/graphql/v1` route (point any GraphQL client at
+`POST /rest/v1/rpc/graphql` instead). The `/api/*`
 surface is always plain HTTP + the two headers. A thin ~200-line wrapper in your
 own codebase (`client.agents.run({...})`) is the common ergonomic pattern.

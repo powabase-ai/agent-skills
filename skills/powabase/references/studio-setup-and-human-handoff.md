@@ -66,19 +66,30 @@ Be specific and unblock-able. Good asks:
 Confirm before doing anything destructive or hard to reverse (deleting sources/KBs/
 agents, overwriting a graph, rotating a key).
 
-## 5. Powabase MCP server — coming soon (placeholder)
+## 5. Powabase MCP server
 
-<!-- Powabase does not ship an MCP server yet (Supabase does). Keep this as a
-     placeholder; fill in URL / .mcp.json / auth / tool list when it launches. -->
-There is **no first-party Powabase MCP server or CLI today.** The supported
-interface is raw HTTP + the live docs. Do **not** assume MCP tools like
-`powabase_search_docs` or `powabase_execute_sql` exist.
+- **URL:** `https://mcp.powabase.ai/mcp` — streamable HTTP. Auth is OAuth: the
+  client opens a sign-in with the user's Powabase account; no API key to paste.
+- **Claude Code:** `claude mcp add --transport http powabase https://mcp.powabase.ai/mcp`.
+  Other clients: add it as a remote/HTTP MCP server with that URL.
+- **Read-only:** `https://mcp.powabase.ai/mcp?read_only=true` registers only the
+  read-only tools (no `execute_sql`, no create/update/delete).
+- **Tools (~60):** projects (`list_organizations`, `list_projects`, `get_project`,
+  `pause_project`, `resume_project`, URL + publishable keys, models) — **no
+  create/delete project**, so new projects are made in Studio; database
+  (`execute_sql` at service-role privilege, list schemas/tables, describe table);
+  auth users + auth config; storage buckets/objects; knowledge bases (incl.
+  search), sources (import, re-extract, delete); agents (CRUD, run, approve);
+  orchestrations; workflows (CRUD, deploy, run, executions); sessions/runs;
+  project settings; custom tools; `search_docs`. Most take a `project_ref`; a
+  `Not authorized for that project` result means call `list_projects`.
 
-When it ships, expect this section to document: the server URL, the `.mcp.json`
-entry, the auth/OAuth flow, and the exposed tools (likely docs search, SQL
-execution, resource management) — at which point prefer the MCP server for discovery
-and schema lookups over hand-built requests. Until then, build requests from these
-references and verify against `https://docs.powabase.ai`.
+**When to use which:** if the server is connected in this session, prefer it for
+discovery and interactive work (inspecting a project's tables, one-off SQL, trying a
+KB search or agent run, docs lookup). Build the app itself on the REST API
+(`/api/*`, `/rest/v1/*`, `/auth/v1/*`, …) from these references — MCP is a tool for
+the assistant, not a runtime SDK. If it isn't connected, don't assume its tools
+exist; use raw HTTP and verify against `https://docs.powabase.ai`.
 
 *(Unrelated: agents can connect to **external** MCP servers as tools — that's a
 runtime agent feature, not a Powabase MCP server for your coding assistant. See

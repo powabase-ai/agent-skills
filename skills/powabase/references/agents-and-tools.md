@@ -245,7 +245,8 @@ At each run the platform calls `tools/list`, namespaces discovered tools as
 >   `enabled` (`enabled: false` skips discovery entirely — no `tools/list`/`tools/call`).
 
 (Note: this MCP feature is the agent connecting to external tool providers — it is
-**not** a Powabase MCP server for your coding assistant, which doesn't exist yet.)
+**not** the Powabase MCP server for your coding assistant — see
+[studio-setup-and-human-handoff.md](studio-setup-and-human-handoff.md) §5.)
 
 ## 5. `config_override` (PATCH a tool assignment)
 
