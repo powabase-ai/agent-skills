@@ -41,22 +41,28 @@ block in a workflow; a workflow can call a KB search — they compose.
    the same args 3× in a row ("doom loop").
 4. **Two headers or 401.** Every `/api/*`, `/rest/v1/*`, `/auth/v1/*`,
    `/storage/v1/*` request needs **both** `apikey` and `Authorization: Bearer`.
-   Sending one is the #1 cause of 401s.
+   Sending one is the #1 cause of 401s. A valid user token on a non-conversation
+   `/api/*` route is a `403`, not a 401: switch to the Service Role key.
 5. **Security is not the default — make it explicit.** See the security box below.
 6. **Hand off to the human for Studio-only setup.** Credentials, BYOK provider
    keys, and tool API keys live behind the Studio UI. Don't guess them — ask, and
    point the user to the exact place. See [studio-setup-and-human-handoff.md](references/studio-setup-and-human-handoff.md).
 
 > ### ⚠️ Security must-knows (read before exposing anything to end users)
-> - **Run agents from a trusted backend only.** Powabase does **not** forward
->   end-user JWTs to agent tools — `database_query`/`database_write` run on the DB
->   **superuser connection** (RLS bypassed) regardless of caller. Exposing
->   `/api/agents/{id}/run/stream` (the tool-bearing path) to clients with their own
->   tokens gives them full project-wide DB access. Inject per-user data yourself
->   (via `context_items` or a custom tool). See [agents-and-tools.md](references/agents-and-tools.md).
+> - **Service Role key for admin routes; user JWTs only for conversations.**
+>   Since powabase-ai 0.12.0 an end-user JWT may call only the 16 conversation
+>   routes (own agent/orchestration sessions, runs, approvals). Every other `/api/*`
+>   route returns `403` unless it carries the Service Role key. Don't forward a
+>   user token to KB, source, workflow or management routes; call them from your
+>   backend. Table: [connection-and-auth.md](references/connection-and-auth.md) §2a.
+> - **End-user runs are constrained.** They can continue only the user's own
+>   existing session and cannot send `knowledge_bases`, `runtime_knowledge_bases`,
+>   `context_handler_id` or by-reference `context_items`; configure KBs on the
+>   agent. Agent `database_*`/`storage_*` tools run **as the caller** (user's
+>   grants + RLS on end-user runs). See [agents-and-tools.md](references/agents-and-tools.md).
 > - **`ai.*` RLS is project-wide, not per-user.** Any signed-in (`authenticated`)
->   user can read every agent/KB/workflow in the project; only session tables
->   filter by `user_id`. See [baas-database-rls.md](references/baas-database-rls.md).
+>   user can read every agent/KB/workflow in the project via PostgREST; only session
+>   tables filter by `user_id`. See [baas-database-rls.md](references/baas-database-rls.md).
 > - **Never ship the Service Role key, JWT Secret, or Database URL client-side.**
 >   The Anon (Publishable) key is the only credential safe in a browser/mobile app.
 
@@ -64,7 +70,8 @@ block in a workflow; a workflow can call a KB search — they compose.
 
 Base URL is the **Project URL**: `https://{ref}.p.powabase.ai`. Most platform docs
 (and this skill) assume the **Service Role (Secret) Key** for server-side `/api/*`
-calls.
+calls; end-user JWTs are accepted only on the conversation routes
+([connection-and-auth.md](references/connection-and-auth.md) §2a).
 
 ```python
 import requests
@@ -80,7 +87,7 @@ requests.get(f"{BASE_URL}/api/agents", headers=headers).json()   # verify: 200 +
 | --- | --- | --- |
 | **Project URL** | `BASE_URL` for every call | Yes |
 | **Anon (Publishable)** | Browser calls to PostgREST/Storage that respect RLS | **Yes** |
-| **Service Role (Secret)** | Server-side `/api/*` and RLS-bypassing PostgREST | **No — server only** |
+| **Service Role (Secret)** | Server-side `/api/*` (required except the user-JWT conversation routes) and RLS-bypassing PostgREST | **No — server only** |
 | **JWT Secret** | Verifying user JWTs on your backend | **No** |
 | **Database URL** | Direct Postgres (migrations, ORMs, psql) | **No** |
 
