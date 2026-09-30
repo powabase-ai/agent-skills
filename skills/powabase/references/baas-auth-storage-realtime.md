@@ -31,7 +31,9 @@ Header sets: unauthenticated calls (signup/signin/recover/OAuth) use `apikey: <A
 Refresh before expiry (refresh tokens are single-use, rotated; a 10-second reuse
 window forgives concurrent double-refreshes). The token's `role` claim
 (`anon`/`authenticated`/`service_role`) sets the Postgres role; `sub` is the user
-UUID (→ `auth.uid()`).
+UUID (→ `auth.uid()`). The user token is also what `/api/*` conversation routes
+accept for end users (needs the UUID `sub` and an `exp`); all other `/api/*` routes
+need the Service Role key ([connection-and-auth.md](connection-and-auth.md) §2a).
 
 > **`app_metadata` vs `user_metadata`.** `user_metadata` is **user-editable**
 > (via `PUT /auth/v1/user`) — never use it for authorization. Put roles/flags in

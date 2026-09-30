@@ -135,7 +135,7 @@ constant in your client futureproofs this.
 
 Retry **only** transient statuses: `503` (e.g. billing service unreachable) and
 `429` (rate limit — today only on workflow `/execute`, 20/min/user). Do **not**
-retry `402` (out of credits), other `4xx`, or `401`.
+retry `402` (out of credits), other `4xx` (including `403`), or `401`.
 
 ```typescript
 async function withRetry(fn: () => Promise<Response>): Promise<Response> {

@@ -131,7 +131,7 @@ while (true) {
 ## 6. Multi-turn
 
 Capture `session_id` from `start`, then send it on the next run to continue the
-conversation. There is no create-session endpoint — the first run mints it. See
+conversation. A session can also be created up front with `POST /api/agents/{id}/sessions`, or the first run mints it; an end-user token may only continue a session it owns. See
 [agents-and-tools.md](agents-and-tools.md).
 
 ## 7. Retry caution

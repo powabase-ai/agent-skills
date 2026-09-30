@@ -65,6 +65,7 @@ overlap**.
 | POST / GET | `/api/agents/{id}/hooks` | Add / list lifecycle hooks |
 | DELETE | `/api/agents/{id}/hooks/{hook_id}` | Remove a hook |
 | GET | `/api/agents/{id}/sessions` | List the agent's chat sessions |
+| POST | `/api/agents/{id}/sessions` | Create a session (optional `user_id`, Service Role only) |
 | POST | `/api/agents/{id}/run` | **Sync run — no tools, no ReAct loop** (single LLM call) |
 | POST | `/api/agents/{id}/run/stream` | **Streaming run — tools + ReAct + multi-turn** |
 | GET | `/api/agents/runs/{run_id}` | Fetch a run (status, error, events, tool_calls, ...) |
@@ -109,9 +110,16 @@ run fails `provider_key_decrypt_failed`. Format + walkthrough:
 (There is **no** per-run `reasoning_requested` — reasoning is the agent's
 `settings.reasoning_effort`, above.) **Context sources are mutually exclusive** —
 provide at most **one** of `knowledge_bases` / `context_handler_id` /
-`context_override` / `context_items`, or you get 400.
+`context_override` / `context_items`, or you get 400. **End-user-JWT runs
+(0.12.0+) cannot send `knowledge_bases`, `runtime_knowledge_bases`,
+`context_handler_id` or by-reference `context_items`**, and can only continue an
+existing session of their own (omit `session_id`, or create one first via
+`POST /api/agents/{id}/sessions`; never invent an id). Configure KBs on the agent,
+or make the run with the Service Role key from your backend. Which key for which
+route: [connection-and-auth.md](connection-and-auth.md) §2a.
 
-**Runtime KB references** (`/run/stream` only, since powabase-ai 0.4): to give the
+**Runtime KB references** (`/run/stream` only, since powabase-ai 0.4; **Service
+Role key only**, an end-user JWT is rejected): to give the
 agent a KB **for one query without attaching it**, pass
 `runtime_knowledge_bases: [{ id, top_k?, retrieval_method?, similarity_threshold?,
 filter_metadata?, source_ids?, max_context_tokens? }]`. This adds the named KBs to
@@ -167,18 +175,31 @@ POST /api/agents/{id}/tools   { "tool_name": "database_query" }
 
 | Tool | Notes / constraints |
 | --- | --- |
-| `database_query` | Read-only `SELECT` (single statement). Runs as **DB superuser**. 50k-char cap. |
-| `database_write` | INSERT/UPDATE/DELETE; UPDATE/DELETE require `WHERE`. Superuser. |
+| `database_query` | Read-only `SELECT` (single statement). Runs **as the caller** (see the callout below). Only allowlisted built-in functions, operators and casts. 50k-char cap, 30 s timeout. |
+| `database_write` | INSERT/UPDATE/DELETE; UPDATE/DELETE require `WHERE`. Same privilege model as `database_query`. |
 | `http_request` | External HTTP, 10k-char cap, 30 s. **No SSRF protection** — can reach `localhost`/RFC1918/`169.254.169.254`. |
 | `code_execute` | Python/JS in a sandbox. Needs platform `CODE_SANDBOX_URL` (+ optional `CODE_SANDBOX_API_KEY`); else returns *"Code sandbox is not configured"*. |
 | `storage_read` / `storage_write` | Project Storage list/download / upload UTF-8 text. `storage_read` returns a **signed URL** for binary files (inline content only for text). |
 | `web_search` | Exa.ai (1–10 results, ~20–50k chars). Five `search_type` modes incl. agentic **`deep`** / **`deep-reasoning`** (slower, pricier — see callout). **Needs `EXA_API_KEY`** (Settings → Tools). |
 | `web_scrape` | Firecrawl → markdown (≤200k chars — exempt from the 50k cap). **Needs `FIRECRAWL_API_KEY`**; `include_images` uses `gpt-4.1-mini` vision; direct image URLs bypass Firecrawl. |
 
-> **Security:** `database_query`/`database_write` ignore the caller's identity and
-> run as superuser — never expose `/run*` to end-user JWTs (see §8). Prefer a
-> **custom tool** over builtin `http_request` for fixed endpoints (custom tools
-> enforce SSRF validation).
+> **Tool privileges (0.12.0+).** Database and storage tools act as the caller, not
+> as a superuser:
+> - **End-user run** (user JWT): `database_*` run with that user's grants and RLS,
+>   and `storage_*` act as that user.
+> - **Service-role run** (Service Role key): `database_*` use a per-agent login that
+>   reaches **only the tables configured on the agent**. Only agents with database
+>   tools get a login; an agent with no table list reaches nothing.
+> - Configure agents with **tables and `security_invoker` views** only. Queries
+>   time out after 30 s. Don't write SQL that relies on arbitrary functions, casts
+>   or superuser access; it will be rejected.
+> - Storage bucket names must match `^[A-Za-z0-9_-]+$`; paths may not contain
+>   empty, `.` or `..` segments, `%`, `\`, `?`, `#` or control characters; the
+>   internal bucket is unreachable.
+>
+> So RLS on the tables you configure now governs agent tool access. Also prefer a
+> **custom tool** over builtin `http_request` for fixed endpoints (custom
+> tools enforce SSRF validation).
 
 #### `web_search` search modes (`search_type`) — pick deliberately; cost varies ~2.5×
 
@@ -264,9 +285,11 @@ returning 200 unchanged).
 ## 6. Sessions
 
 A session is a multi-turn conversation holding a sequence of runs (each with input,
-response, tool calls, retrieved context, usage). **There is no create-session
-endpoint** — omit `session_id` on a run and capture it from the `start` SSE event;
-pass it back on later runs to continue.
+response, tool calls, retrieved context, usage). Start one with
+`POST /api/agents/{id}/sessions` (a Service Role caller may set `user_id` to make
+it that end user's), or omit `session_id` on a run and capture it from the
+`start` SSE event; pass it back on later runs to continue. An **end-user** run may
+only continue an existing session it owns; it cannot name a new id.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -276,6 +299,8 @@ pass it back on later runs to continue.
 | GET | `/api/sessions/{id}/runs/{run_id}/retrieved-context` | Context injected for one run |
 | DELETE | `/api/sessions/{id}` | Delete the session + its runs |
 
+Routes in this table are on the end-user allowlist (owner-only); the rest of
+`/api/*` needs the Service Role key ([connection-and-auth.md](connection-and-auth.md) §2a).
 Ownership is enforced; a session you don't own returns **404** (not 403), so you
 can't distinguish "missing" from "not yours". (This **agent session** is unrelated
 to the GoTrue **auth session** — see [studio-setup-and-human-handoff.md](studio-setup-and-human-handoff.md) / glossary.)
@@ -354,9 +379,13 @@ retrieves chunks from each KB for injection into your own prompts. GET to list/g
 
 ## 11. The per-user data pattern (important)
 
-Because tools run as superuser and end-user JWTs aren't forwarded, enforce
-per-user scope **yourself**: run the agent from your backend with the Service Role
-key and inject the user's allowed data via `context_items` (query `ai.chunks` under
-the user's JWT first), or via a custom tool that takes an opaque `session_token`
-your backend resolves to the user. Full recipes:
+For per-user scope, prefer letting the platform do it: let the user call the run
+routes with their own JWT (§2a of connection-and-auth.md) and put RLS on the
+tables the agent's database tools use, so the tools see only that user's rows.
+Where you need retrieval or context that end-user runs cannot request (KBs, stored
+context), run the agent from your backend with the Service Role key and inject
+the user's allowed data via `context_items` (query `ai.chunks` under the user's
+JWT first), or via a custom tool that takes an opaque `session_token` your
+backend resolves to the user. Service-role runs are limited to the agent's
+configured tables, not RLS-scoped to a user, so scope them yourself. Full recipes:
 [baas-database-rls.md](baas-database-rls.md) and the cookbook on `docs.powabase.ai`.
