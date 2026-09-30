@@ -96,13 +96,20 @@ Every `ai.*` table has RLS enabled, but the default policies are **project-wide*
 
 To make `ai.*` multi-tenant-safe, do one of: (a) tighten the default policies;
 (b) gate `ai.*` behind your own backend; or (c) never expose `ai.*` to end users.
-The typed `/api/*` endpoints use the Service Role key and enforce **session**
-ownership (a session/run you don't own returns 404), so `ai.*` RLS doesn't govern
-them. But that ownership check does **not** sandbox an agent's *tools*: a
-`database_query`/`database_write` call runs on the superuser connection with no
-per-user filter. So **never expose `/api/agents/{id}/run/stream` to clients with
-their own JWTs** — run agents from a trusted backend and inject per-user scope
-yourself (§8).
+The typed `/api/*` endpoints enforce **session** ownership (a session/run you
+don't own returns 404), so `ai.*` RLS doesn't govern them. Since powabase-ai
+0.12.0 an end-user JWT is accepted only on the conversation routes and every
+other `/api/*` route needs the Service Role key
+([connection-and-auth.md](connection-and-auth.md) §2a).
+
+**Agent database tools run as the caller, not as superuser.** On an end-user run
+(user JWT), `database_query`/`database_write` get that user's grants and **your
+RLS policies** on the tables configured for the agent, so put RLS on those tables
+and per-user scoping follows. On a service-role run they use a per-agent login
+limited to the agent's configured tables (tables and `security_invoker` views
+only; no table list means no access), which is *not* per-user, so scope it
+yourself. Queries allow only allowlisted built-in functions, operators and casts,
+and time out after 30 s. Details: [agents-and-tools.md](agents-and-tools.md) §4.
 
 ## 4. PostgREST patterns
 
@@ -180,11 +187,14 @@ unqualified), while `pg_net`/`uuid-ossp` and anything you install land in
 
 ## 8. The per-user RAG-context pattern (cookbook)
 
-Because KB search and agent tools run as the service role / DB superuser, enforce
-per-user access yourself: enable RLS on `ai.sources`/`ai.chunks`/`ai.indexed_sources`
+KB search runs as the service role, so it does not respect per-user RLS (agent
+database tools, by contrast, run as the caller; see §3). To enforce per-user KB
+access yourself: enable RLS on `ai.sources`/`ai.chunks`/`ai.indexed_sources`
 keyed to ownership in your own `public` table, query `ai.chunks` **from the browser
 under the user's JWT** (`Accept-Profile: ai`, Anon key + user token), then pass the
 RLS-filtered rows to the agent as `context_items` (which bypasses the agent's own
-retrieval). Run the agent itself from your backend with the Service Role key. Full
+retrieval). Run that agent from your backend with the Service Role key (end-user runs cannot
+send `context_handler_id` or by-reference `context_items`; see
+[connection-and-auth.md](connection-and-auth.md) §2a). Full
 recipe on `docs.powabase.ai` (BaaS + AI cookbook); see also
 [agents-and-tools.md](agents-and-tools.md).

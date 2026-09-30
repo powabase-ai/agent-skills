@@ -107,12 +107,12 @@ without bundling a third-party PDF library. `GET /api/sources/{id}` returns a
   - **Pagination:** `auto_metadata.page_count`.
 - **Serving to a browser:** the derivative/page-text endpoints **stream bytes**
   through the authenticated `/api/*` surface (the `sources` bucket is **private**;
-  there is **no public or signed URL** for derivatives). So a frontend either calls
-  these endpoints with the user's session, **or** — because source access is
-  **project-wide, not per-user** (see [baas-database-rls.md](baas-database-rls.md)) —
-  for a multi-tenant app **proxy them through your backend and enforce ownership
-  there**. An `<img src="/api/sources/{id}/derivatives/image/download?index=0">` works
-  only if that request carries valid auth on your origin.
+  there is **no public or signed URL** for derivatives). These `/api/sources/*`
+  routes are **not** end-user routes: an end-user JWT gets `403`, and source access
+  is **project-wide, not per-user** (see [baas-database-rls.md](baas-database-rls.md)).
+  So **proxy them through your backend** with the Service Role key and enforce
+  ownership there. A bare `<img src="/api/sources/...">` in the browser cannot
+  carry the Service Role key and will fail; point it at your backend route instead.
 - **Limitation — no positional/bbox data.** Extraction stores plain page text, not
   per-character coordinates. You get *page image + plain-text search/overlay*, not a
   pixel-aligned selection layer. For true text-on-image selection you'd OCR the page
@@ -213,8 +213,11 @@ nodes/JSON — the KB stays searchable but may be incomplete until done.
 
 Response: `{ "results": [ { "score": <float>, "text": <string>, ...source metadata }, ... ] }`
 (iterate `results["results"]`). Search runs with the **service role and bypasses
-RLS** — to enforce per-user access, query `ai.chunks` under the user's JWT and pass
-results as `context_items` instead (see [agents-and-tools.md](agents-and-tools.md)).
+RLS**, and `/api/knowledge-bases/*` needs the **Service Role key** (an end-user JWT
+gets 403; call it from your backend). To enforce per-user access, query `ai.chunks`
+under the user's JWT and pass results as `context_items` from a backend run (see
+[agents-and-tools.md](agents-and-tools.md) and
+[connection-and-auth.md](connection-and-auth.md) §2a).
 
 ## 4. Indexing strategies (`indexing_config.strategy`)
 
