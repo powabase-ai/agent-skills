@@ -78,10 +78,11 @@ The **only** quantitative limit on the AI surface today:
 | --- | --- | --- |
 | `POST /api/workflows/{id}/execute` (and `/execute/stream`) | **20 / minute / user** | `429` |
 
-Keyed on the JWT `sub`; **unauthenticated callers (Service Role with no user) share
-one `"anonymous"` budget** — so a backend firing workflows for many users should
-either pass each end user's access token (each gets their own 20/min) or queue with
-a token bucket. Agent runs, orchestration runs, and KB search are **not**
+Keyed on the JWT `sub`. Workflow execution is **not** an end-user route (0.12.0+): an
+end-user token gets `403`, so a backend calls it with the Service Role key, and
+**those callers (no user `sub`) share one `"anonymous"` budget**. A backend firing
+workflows for many users must queue with a token bucket (you cannot get per-user
+budgets by forwarding user tokens). Agent runs, orchestration runs, and KB search are **not**
 rate-limited (credit-metered). GoTrue has its own per-endpoint limits (see
 [baas-auth-storage-realtime.md](baas-auth-storage-realtime.md)).
 
@@ -100,6 +101,7 @@ Back off with jitter (`3s → 6s → 12s → 30s`), don't retry within the same 
 | `429 rate limit` (workflow execute) | Back off with jitter; pace to ≤20/min. |
 | `provider_key_decrypt_failed` | Re-upsert the BYOK key; then retry. |
 | `401` | Check both headers (`apikey` + `Authorization`). Don't retry blindly. |
+| `403` | Valid end-user JWT on a route outside the conversation allowlist (0.12.0+). Use the Service Role key from your backend ([connection-and-auth.md](connection-and-auth.md) §2a). Don't retry. |
 
 ## 5. Failed-run debugging playbook
 

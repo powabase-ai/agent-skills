@@ -71,7 +71,7 @@ Two more routes take **no** bearer because they authenticate another way:
 **Everything else under `/api/*` needs the Service Role key; an end-user JWT gets
 `403`.** That includes agent/KB/source/workflow/tool/orchestration management,
 knowledge-base search, source upload and download, context handlers, workflow
-execution, `/api/database/*`, and `/api/billing/*`. Call those from your backend.
+execution, and `/api/database/*`. Call those from your backend.
 
 Rules for end-user calls on the allowlisted routes:
 
@@ -85,7 +85,7 @@ Rules for end-user calls on the allowlisted routes:
 - A backend using the Service Role key may set `user_id` in the
   `POST /api/agents/{id}/sessions` body so the session belongs to that end user.
 - Agent database and storage tools run as the caller. See
-  [agents-and-tools.md](agents-and-tools.md) §8.
+  [agents-and-tools.md](agents-and-tools.md) §4 (builtin tools).
 
 **Migrating from earlier versions:** if your backend forwarded the user's JWT to
 KB, source, or other management routes, switch those calls to the Service Role
